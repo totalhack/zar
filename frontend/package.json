@@ -2,8 +2,12 @@
   "name": "zar",
   "version": "0.0.1",
   "description": "Zillion Analytics Recorder",
-  "main": "index.js",
+  "main": "zar.js",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "serve": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -23,5 +27,8 @@
   "homepage": "https://github.com/totalhack/zar#readme",
   "dependencies": {
     "analytics": "^0.5.5"
+  },
+  "devDependencies": {
+    "eslint": "^7.11.0"
   }
 }
