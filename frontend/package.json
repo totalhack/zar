@@ -26,6 +26,8 @@
   },
   "homepage": "https://github.com/totalhack/zar#readme",
   "dependencies": {
+    "@analytics/google-tag-manager": "^0.3.0",
+    "@analytics/storage-utils": "^0.2.4",
     "analytics": "^0.5.5"
   },
   "devDependencies": {
