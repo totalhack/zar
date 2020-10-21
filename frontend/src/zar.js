@@ -9,8 +9,7 @@ const SID_KEY = '__zar_sid';
 const VID_KEY = '__zar_vid';
 const DAY_TTL = 1000 * 60 * 60 * 24 // In milliseconds
 const CID_TTL = DAY_TTL * 365 * 2 // 2 years, ~like GA
-// const SID_TTL = DAY_TTL; // 1 day, ~like GA
-const SID_TTL = 1000 * 10;
+const SID_TTL = DAY_TTL; // 1 day, ~like GA
 
 function generateClientId() {
   return uuid();
@@ -24,22 +23,38 @@ function generateVisitId() {
   return Date.now().toString(36) + '.' + Math.random().toString(36).substring(2);
 }
 
-function objectExpired(idObj, ttl) {
+function objectExpired(idObj, ttl, debug) {
   const diff = Date.now() - idObj.t
   if (diff >= ttl) {
-    // console.log('Expired after ', diff / 1000.0, 'seconds');
+    if (debug) {
+      console.log('Expired after ', diff / 1000.0, 'seconds');
+    }
     return true;
   }
   return false;
 }
 
-function initId(key, expirationCallback, generator) {
+function expireByReferrer(idObj, debug) {
+  // XXX If referrer is blank maybe we don't consider it a new visit?
+  if (document.referrer.indexOf(window.location.hostname) == -1) {
+    if (debug) {
+      console.log('Host not in referrer: ', window.location.hostname, '//', document.referrer);
+    }
+    return true;
+  }
+  return false;
+}
+
+function initId(key, expirationCallback, generator, debug = false) {
   var id;
   var isNew = false;
   const idObj = getItem(key);
-  if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj))) {
+  if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj, debug))) {
     id = generator();
     isNew = true;
+    if (debug) {
+      console.log('Generated ID for', key, '-', id);
+    }
   } else {
     id = idObj.id;
   }
@@ -48,27 +63,19 @@ function initId(key, expirationCallback, generator) {
   return { id, isNew }
 }
 
-function expireByReferrer() {
-  // console.log('referrer', document.referrer);
-  // XXX If referrer is blank maybe we don't consider it a new visit?
-  if (document.referrer.indexOf(window.location.hostname) == -1) {
-    // console.log('new visit');
-    return true;
-  }
-  return false;
-}
-
-function initIds(
-  clientIdExpired = (idObj) => { return objectExpired(idObj, CID_TTL) },
-  sessionIdExpired = (idObj) => { return objectExpired(idObj, SID_TTL) },
-  visitIdExpired = expireByReferrer) {
-  const cidResult = initId(CID_KEY, clientIdExpired, generateClientId);
-  const sidResult = initId(SID_KEY, sessionIdExpired, generateSessionId);
+function initIds({
+  clientIdExpired = (idObj, debug) => { return objectExpired(idObj, CID_TTL, debug) },
+  sessionIdExpired = (idObj, debug) => { return objectExpired(idObj, SID_TTL, debug) },
+  visitIdExpired = expireByReferrer,
+  debug = false
+} = {}) {
+  const cidResult = initId(CID_KEY, clientIdExpired, generateClientId, debug);
+  const sidResult = initId(SID_KEY, sessionIdExpired, generateSessionId, debug);
   if (sidResult.isNew) {
     // Force a reset of the visit ID on new session
     removeVisitId();
   }
-  const vidResult = initId(VID_KEY, visitIdExpired, generateVisitId);
+  const vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, debug);
   return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id }
 }
 
@@ -138,15 +145,13 @@ function zar() {
     },
     bootstrap: ({ payload, config, instance }) => {
       // TODO: ability to override initIds params with zar() args
-      const result = initIds();
-      // Override analytics' anonymouse ID with client ID
-      instance.setAnonymousId(result.cid);
+      const result = initIds({ debug: instance.getState('context').debug });
+      instance.setAnonymousId(result.cid); // Override analytics' anonymouse ID with client ID
     },
     methods: {
       initIds() {
-        const result = initIds();
-        // Override analytics' anonymouse ID with client ID
-        this.instance.setAnonymousId(result.cid);
+        const result = initIds({ debug: this.instance.getState('context').debug });
+        this.instance.setAnonymousId(result.cid); // Override analytics' anonymouse ID with client ID
         return result;
       },
       getIds() {
