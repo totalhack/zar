@@ -3,23 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "npm run serve",
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
     "lint": "vue-cli-service lint",
-    "deploy": "netlify deploy -p"
+    "deploy": "netlify deploy -p",
+    "start": "npm run serve"
   },
   "dependencies": {
-    "@analytics/google-analytics": "^0.5.2",
-    "analytics": "^0.5.0",
-    "core-js": "^2.6.5",
+    "core-js": "^3.6.5",
     "vue": "^2.6.10",
     "vue-router": "^3.0.7"
   },
   "devDependencies": {
-    "@vue/cli-plugin-babel": "^3.10.0",
-    "@vue/cli-plugin-eslint": "^3.10.0",
-    "@vue/cli-service": "^3.10.0",
+    "@vue/cli-plugin-babel": "^4.5.8",
+    "@vue/cli-plugin-eslint": "^4.5.8",
+    "@vue/cli-service": "^4.5.8",
     "babel-eslint": "^10.0.1",
     "eslint": "^5.16.0",
     "eslint-plugin-vue": "^7.0.1",

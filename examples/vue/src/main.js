@@ -14,8 +14,7 @@ const router = new VueRouter({
 
 const zar = init({
   app: 'my-vue-app',
-  // gtmContainerId: process.env.VUE_APP_GTM_CONTAINER_ID,
-  gtmContainerId: 'GTM-W5L9BBQ',
+  gtmContainerId: process.env.VUE_APP_GTM_CONTAINER_ID,
   debug: true,
 });
 

@@ -2,28 +2,17 @@ import { Analytics } from 'analytics';
 import { getItem, setItem, removeItem } from '@analytics/storage-utils';
 import googleTagManager from '@analytics/google-tag-manager';
 
+import { uuid } from './utils';
+import { zarPlugin } from './plugin';
+
 const CID_KEY = '__zar_cid';
 const SID_KEY = '__zar_sid';
 const VID_KEY = '__zar_vid';
-
 // In milliseconds
 const DAY_TTL = 1000 * 60 * 60 * 24
 const CID_TTL = DAY_TTL * 365 * 2 // 2 years, ~like GA
 // const SID_TTL = DAY_TTL; // 1 day, ~like GA
 const SID_TTL = 1000 * 10;
-
-/* ref: http://bit.ly/2daP79j */
-var lut = []; for (var i = 0; i < 256; i++) { lut[i] = (i < 16 ? '0' : '') + (i).toString(16); }
-function uuid() {
-  var d0 = Math.random() * 0x100000000 >>> 0;
-  var d1 = Math.random() * 0x100000000 >>> 0;
-  var d2 = Math.random() * 0x100000000 >>> 0;
-  var d3 = Math.random() * 0x100000000 >>> 0;
-  return lut[d0 & 0xff] + lut[d0 >> 8 & 0xff] + lut[d0 >> 16 & 0xff] + lut[d0 >> 24 & 0xff] + '-' +
-    lut[d1 & 0xff] + lut[d1 >> 8 & 0xff] + '-' + lut[d1 >> 16 & 0x0f | 0x40] + lut[d1 >> 24 & 0xff] + '-' +
-    lut[d2 & 0x3f | 0x80] + lut[d2 >> 8 & 0xff] + '-' + lut[d2 >> 16 & 0xff] + lut[d2 >> 24 & 0xff] +
-    lut[d3 & 0xff] + lut[d3 >> 8 & 0xff] + lut[d3 >> 16 & 0xff] + lut[d3 >> 24 & 0xff];
-}
 
 function generateClientId() {
   // TODO: Get this from GA if its present?
