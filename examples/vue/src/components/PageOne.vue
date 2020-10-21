@@ -1,11 +1,15 @@
 <template>
-  <div class='content'>
+  <div class="content">
     <h1>Page One</h1>
-    <p>This is the page one!</p>
+    <p>IDs: {{ ids }}</p>
   </div>
 </template>
 <script>
 export default {
-
+  computed: {
+    ids: function () {
+      return this.$analytics.plugins.zar.getIds();
+    }
+  }
 }
 </script>
