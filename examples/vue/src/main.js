@@ -15,6 +15,7 @@ const router = new VueRouter({
 const analytics = init({
   app: 'my-vue-app',
   gtmContainerId: process.env.VUE_APP_GTM_CONTAINER_ID,
+  apiUrl: 'http://localhost/api/v1',
   debug: true,
 });
 

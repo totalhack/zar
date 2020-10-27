@@ -15,6 +15,7 @@
     <button v-on:click="reloadIds">Reload IDs</button>
     <button v-on:click="page">Trigger Page</button>
     <button v-on:click="track">Trigger Track</button>
+    <button v-on:click="identify">Trigger Identify</button>
   </div>
 </template>
 <script>
@@ -37,6 +38,9 @@ export default {
     },
     track: function () {
       this.$analytics.track('event1', { attr1: 'val1', attr2: 'val2' })
+    },
+    identify: function () {
+      this.$analytics.identify('user@example.com', { attr1: 'val1', attr2: 'val2' })
     }
   },
   created: function () {

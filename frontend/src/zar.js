@@ -1,6 +1,7 @@
 import { Analytics } from 'analytics';
 import { getItem, setItem, removeItem } from '@analytics/storage-utils';
 import googleTagManager from '@analytics/google-tag-manager';
+import axios from 'axios';
 
 import { uuid } from './utils';
 
@@ -117,9 +118,12 @@ function removeIds() {
   removeClientId();
 }
 
-function zar() {
+function zar({ apiUrl }) {
   return {
     name: 'zar',
+    config: {
+      apiUrl: apiUrl,
+    },
     initialize: ({ config }) => { },
     loaded: () => { return true; },
     pageStart: ({ payload, config, instance }) => {
@@ -128,17 +132,21 @@ function zar() {
     trackStart: ({ payload, config, instance }) => {
       return Object.assign({}, payload, { zar: getIds() })
     },
+    identifyStart: ({ payload, config, instance }) => {
+      return Object.assign({}, payload, { zar: getIds() })
+    },
     page: ({ payload, options, instance, config }) => {
       console.log('page', payload, options, config);
-      // axios call to custom backend
+      const resp = axios.post(`${config.apiUrl}/page`, payload);
     },
-    track: ({ payload }) => {
+    track: ({ payload, options, instance, config }) => {
       console.log('track', payload);
-      // axios call to custom backend
+      const resp = axios.post(`${config.apiUrl}/track`, payload);
     },
-    identify: ({ payload }) => {
+    identify: ({ payload, options, instance, config }) => {
       console.log('identify', payload);
-      // axios call to custom backend
+      // Not hitting custom backend on this for now
+      // const resp = axios.post(`${config.apiUrl}/identify`, payload);
     },
     reset: ({ instance }) => {
       removeIds();
@@ -170,13 +178,20 @@ function zar() {
   }
 }
 
-function init({ app, gtmContainerId, debug = false }) {
+function getDefaultApiUrl() {
+  return window.location.origin + '/api/v1';
+}
+
+function init({ app, gtmContainerId, apiUrl = null, debug = false }) {
   // Convenient opiniated init of Analytics
+  if (!apiUrl) {
+    apiUrl = getDefaultApiUrl();
+  }
   return Analytics({
     app,
     debug,
     plugins: [
-      zar(),
+      zar({ apiUrl }),
       googleTagManager({
         containerId: gtmContainerId
       })

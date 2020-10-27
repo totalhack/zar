@@ -28,7 +28,8 @@
   "dependencies": {
     "@analytics/google-tag-manager": "^0.3.0",
     "@analytics/storage-utils": "^0.2.4",
-    "analytics": "^0.5.5"
+    "analytics": "^0.5.5",
+    "axios": "^0.20.0"
   },
   "devDependencies": {
     "eslint": "^7.11.0"
