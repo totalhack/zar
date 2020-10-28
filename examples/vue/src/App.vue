@@ -5,6 +5,7 @@
         <router-link to="/">Home</router-link>
         <router-link to="/one">Page One</router-link>
         <router-link to="/two">Page Two</router-link>
+        <a href="http://localhost:8080/">Regular Link Home</a>
       </nav>
     </div>
     <router-view />

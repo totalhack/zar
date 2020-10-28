@@ -9,8 +9,8 @@ const CID_KEY = '__zar_cid';
 const SID_KEY = '__zar_sid';
 const VID_KEY = '__zar_vid';
 const DAY_TTL = 1000 * 60 * 60 * 24 // In milliseconds
-const CID_TTL = DAY_TTL * 365 * 2 // 2 years, ~like GA
-const SID_TTL = DAY_TTL; // 1 day, ~like GA
+const CID_TTL = DAY_TTL * 365 * 3 // N years, ~like GA
+const SID_TTL = DAY_TTL * 2; // N days, ~like GA
 
 function generateClientId() {
   return uuid();
@@ -24,7 +24,7 @@ function generateVisitId() {
   return Date.now().toString(36) + '.' + Math.random().toString(36).substring(2);
 }
 
-function objectExpired(idObj, ttl, debug) {
+function expireByTTL(idObj, ttl, debug) {
   const diff = Date.now() - idObj.t
   if (diff >= ttl) {
     if (debug) {
@@ -35,8 +35,7 @@ function objectExpired(idObj, ttl, debug) {
   return false;
 }
 
-function expireByReferrer(idObj, debug) {
-  // XXX If referrer is blank maybe we don't consider it a new visit?
+function expireByReferrer(idObj, newVisit, debug) {
   if (document.referrer.indexOf(window.location.hostname) == -1) {
     if (debug) {
       console.log('Host not in referrer: ', window.location.hostname, '//', document.referrer);
@@ -46,50 +45,109 @@ function expireByReferrer(idObj, debug) {
   return false;
 }
 
-function initId(key, expirationCallback, generator, debug = false) {
+function expireSessionId(idObj, newVisit, debug) {
+  if (!newVisit) {
+    return false;
+  }
+  return expireByTTL(idObj, SID_TTL, debug);
+}
+
+function initId(key, expirationCallback, generator, getter, setter, newVisit, debug = false) {
   var id;
   var isNew = false;
-  const idObj = getItem(key);
-  if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj, debug))) {
+  // var referrer = null;
+  const idObj = getter(key);
+
+  if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj, newVisit, debug))) {
     id = generator();
+    // referrer = document.referrer;
     isNew = true;
     if (debug) {
       console.log('Generated ID for', key, '-', id);
     }
   } else {
     id = idObj.id;
+    // referrer = idObj.referrer;
   }
+
   const t = Date.now(); // Set or reset the time
-  setItem(key, { id, t });
+  setter(key, { id, t });
   return { id, isNew }
 }
 
+function setSessionItem(key, obj) {
+  sessionStorage.setItem(key, JSON.stringify(obj));
+}
+
+function getSessionItem(key) {
+  return JSON.parse(sessionStorage.getItem(key));
+}
+
+function removeSessionItem(key) {
+  sessionStorage.removeItem(key);
+}
+
 function initIds({
-  clientIdExpired = (idObj, debug) => { return objectExpired(idObj, CID_TTL, debug) },
-  sessionIdExpired = (idObj, debug) => { return objectExpired(idObj, SID_TTL, debug) },
-  visitIdExpired = expireByReferrer,
+  clientIdExpired = (idObj, debug) => { return expireByTTL(idObj, CID_TTL, debug) },
+  sessionIdExpired = expireSessionId,
+  visitIdExpired = null,
   debug = false
 } = {}) {
-  const cidResult = initId(CID_KEY, clientIdExpired, generateClientId, debug);
-  const sidResult = initId(SID_KEY, sessionIdExpired, generateSessionId, debug);
-  if (sidResult.isNew) {
-    // Force a reset of the visit ID on new session
-    removeVisitId();
+  // Get or create VID in sessionStorage
+  const vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, getSessionItem, setSessionItem, null, debug);
+
+  // Check sessionStorage first for SID
+  var sessionSid = getSessionId();
+  if (vidResult.isNew && sessionSid) {
+    // This is unexpected, just issue a warning for now. The value is overwritten below.
+    console.warn('Found old sessionStorage SID with new VID');
   }
-  const vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, debug);
-  return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id }
+
+  if (!sessionSid) {
+    // There is no SID in sessionStorage, get or create one in analytics' storage
+    const sidResult = initId(SID_KEY, sessionIdExpired, generateSessionId, getItem, setItem, vidResult.isNew, debug);
+    console.log('Getting SID from analytics storage');
+    sessionSid = sidResult.id;
+  } else {
+    // There is an SID in sessionStorage already. There should be one in analytics`
+    // storage too, but let's make sure.
+    const sidObj = getItem(SID_KEY);
+    if (!sidObj || !sidObj.id) {
+      console.warn('SID missing in analytics storage, setting from sessionStorage value');
+      setItem(SID_KEY, { id: sessionSid, t: Date.now() });
+    }
+  }
+
+  // Set/reset sessionStorage SID either way
+  setSessionItem(SID_KEY, { id: sessionSid, t: Date.now() });
+
+  const cidResult = initId(CID_KEY, clientIdExpired, generateClientId, getItem, setItem, vidResult.isNew, debug);
+
+  return { cid: cidResult.id, sid: sessionSid, vid: vidResult.id }
 }
 
-function getClientId() {
-  return getItem(CID_KEY).id;
+function getClientId(getter = getItem) {
+  const obj = getter(CID_KEY);
+  if (!obj) {
+    return null;
+  }
+  return obj.id;
 }
 
-function getSessionId() {
-  return getItem(SID_KEY).id;
+function getSessionId(getter = getSessionItem) {
+  const obj = getter(SID_KEY);
+  if (!obj) {
+    return null;
+  }
+  return obj.id;
 }
 
-function getVisitId() {
-  return getItem(VID_KEY).id;
+function getVisitId(getter = getSessionItem) {
+  const obj = getter(VID_KEY);
+  if (!obj) {
+    return null;
+  }
+  return obj.id;
 }
 
 function getIds() {
@@ -101,15 +159,16 @@ function getIds() {
 }
 
 function removeClientId() {
-  return removeItem(CID_KEY);
+  removeItem(CID_KEY);
 }
 
 function removeSessionId() {
-  return removeItem(SID_KEY);
+  removeSessionItem(SID_KEY);
+  removeItem(SID_KEY);
 }
 
 function removeVisitId() {
-  return removeItem(VID_KEY);
+  removeSessionItem(VID_KEY);
 }
 
 function removeIds() {

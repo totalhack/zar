@@ -30,6 +30,7 @@ def page(
 ) -> Dict[str, Any]:
     """Store page event"""
     body = dict(body)
+    pp(body)
     headers = extract_header_params(request.headers)
     body["zar"] = body["zar"] or {}
     body["properties"] = body["properties"] or {}
