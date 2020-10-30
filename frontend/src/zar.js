@@ -24,6 +24,18 @@ function generateVisitId() {
   return Date.now().toString(36) + '.' + Math.random().toString(36).substring(2);
 }
 
+function setSessionStorage(key, obj) {
+  sessionStorage.setItem(key, JSON.stringify(obj));
+}
+
+function getSessionStorage(key) {
+  return JSON.parse(sessionStorage.getItem(key));
+}
+
+function removeSessionStorage(key) {
+  sessionStorage.removeItem(key);
+}
+
 function expireByTTL(idObj, ttl, debug) {
   const diff = Date.now() - idObj.t
   if (diff >= ttl) {
@@ -55,36 +67,25 @@ function expireSessionId(idObj, newVisit, debug) {
 function initId(key, expirationCallback, generator, getter, setter, newVisit, debug = false) {
   var id;
   var isNew = false;
-  // var referrer = null;
+  var origReferrer = null;
   const idObj = getter(key);
 
   if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj, newVisit, debug))) {
     id = generator();
-    // referrer = document.referrer;
+    origReferrer = document.referrer;
     isNew = true;
     if (debug) {
       console.log('Generated ID for', key, '-', id);
     }
   } else {
     id = idObj.id;
-    // referrer = idObj.referrer;
+    origReferrer = idObj.origReferrer;
   }
 
-  const t = Date.now(); // Set or reset the time
-  setter(key, { id, t });
-  return { id, isNew }
-}
-
-function setSessionItem(key, obj) {
-  sessionStorage.setItem(key, JSON.stringify(obj));
-}
-
-function getSessionItem(key) {
-  return JSON.parse(sessionStorage.getItem(key));
-}
-
-function removeSessionItem(key) {
-  sessionStorage.removeItem(key);
+  // TODO: replace isNew with hit count
+  const result = { id, t: Date.now(), origReferrer, isNew };
+  setter(key, result);
+  return result;
 }
 
 function initIds({
@@ -93,88 +94,104 @@ function initIds({
   visitIdExpired = null,
   debug = false
 } = {}) {
-  // Get or create VID in sessionStorage
-  const vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, getSessionItem, setSessionItem, null, debug);
+  const vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, getSessionStorage, setSessionStorage, null, debug);
+  const cidResult = initId(CID_KEY, clientIdExpired, generateClientId, getItem, setItem, vidResult.isNew, debug);
 
-  // Check sessionStorage first for SID
-  var sessionSid = getSessionId();
+  // SID logic is a bit more complicated, as we rely on both sessionStorage
+  // and analytics' storage (usually localStorage) to track the session.
+  // The goal is to reuse non-expired SIDs when possible across visits but
+  // to also prevent an SID from being overwritten in an old tab due to
+  // an expiration in a new visit.
+
+  var sidResult;
+  const sidObj = getSIDObj(); // Checks sessionStorage
+  var sessionSid = sidObj && sidObj.id ? sidObj.id : null
   if (vidResult.isNew && sessionSid) {
-    // This is unexpected, just issue a warning for now. The value is overwritten below.
     console.warn('Found old sessionStorage SID with new VID');
   }
 
   if (!sessionSid) {
-    // There is no SID in sessionStorage, get or create one in analytics' storage
-    const sidResult = initId(SID_KEY, sessionIdExpired, generateSessionId, getItem, setItem, vidResult.isNew, debug);
-    console.log('Getting SID from analytics storage');
+    sidResult = initId(SID_KEY, sessionIdExpired, generateSessionId, getItem, setItem, vidResult.isNew, debug);
+    if (debug && !sidResult.isNew) {
+      console.log('Using existing SID from analytics storage');
+    }
     sessionSid = sidResult.id;
   } else {
-    // There is an SID in sessionStorage already. There should be one in analytics`
-    // storage too, but let's make sure.
-    const sidObj = getItem(SID_KEY);
-    if (!sidObj || !sidObj.id) {
+    // SID is in sessionStorage already. There should be one in analytics' storage too.
+    sidResult = sidObj;
+    sidResult.isNew = false;
+    const analyticsSIDObj = getSIDObj({ getter: getItem });
+    if (!analyticsSIDObj || !analyticsSIDObj.id) {
       console.warn('SID missing in analytics storage, setting from sessionStorage value');
-      setItem(SID_KEY, { id: sessionSid, t: Date.now() });
+      setItem(SID_KEY, { id: sidResult.id, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew });
     }
   }
-
   // Set/reset sessionStorage SID either way
-  setSessionItem(SID_KEY, { id: sessionSid, t: Date.now() });
+  setSessionStorage(SID_KEY, { id: sessionSid, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew });
 
-  const cidResult = initId(CID_KEY, clientIdExpired, generateClientId, getItem, setItem, vidResult.isNew, debug);
-
-  return { cid: cidResult.id, sid: sessionSid, vid: vidResult.id }
+  return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id }
 }
 
-function getClientId(getter = getItem) {
-  const obj = getter(CID_KEY);
-  if (!obj) {
-    return null;
-  }
-  return obj.id;
+function getCIDObj({ getter = getItem } = {}) {
+  return getter(CID_KEY);
 }
 
-function getSessionId(getter = getSessionItem) {
-  const obj = getter(SID_KEY);
-  if (!obj) {
-    return null;
-  }
-  return obj.id;
+function getSIDObj({ getter = getSessionStorage } = {}) {
+  return getter(SID_KEY);
 }
 
-function getVisitId(getter = getSessionItem) {
-  const obj = getter(VID_KEY);
-  if (!obj) {
-    return null;
+function getVIDObj({ getter = getSessionStorage } = {}) {
+  return getter(VID_KEY);
+}
+
+function getCID({ getter = getItem } = {}) {
+  const obj = getCIDObj({ getter });
+  return obj ? obj.id : null;
+}
+
+function getSID({ getter = getSessionStorage } = {}) {
+  const obj = getSIDObj({ getter });
+  return obj ? obj.id : null;
+}
+
+function getVID({ getter = getSessionStorage } = {}) {
+  const obj = getVIDObj({ getter });
+  return obj ? obj.id : null;
+}
+
+function getStorage() {
+  return {
+    cid: getCIDObj(),
+    sid: getSIDObj(),
+    vid: getVIDObj()
   }
-  return obj.id;
 }
 
 function getIds() {
   return {
-    cid: getClientId(),
-    sid: getSessionId(),
-    vid: getVisitId()
+    cid: getCID(),
+    sid: getSID(),
+    vid: getVID()
   }
 }
 
-function removeClientId() {
+function removeCID() {
   removeItem(CID_KEY);
 }
 
-function removeSessionId() {
-  removeSessionItem(SID_KEY);
+function removeSID() {
+  removeSessionStorage(SID_KEY);
   removeItem(SID_KEY);
 }
 
-function removeVisitId() {
-  removeSessionItem(VID_KEY);
+function removeVID() {
+  removeSessionStorage(VID_KEY);
 }
 
 function removeIds() {
-  removeVisitId();
-  removeSessionId();
-  removeClientId();
+  removeVID();
+  removeSID();
+  removeCID();
 }
 
 function zar({ apiUrl }) {
@@ -186,13 +203,13 @@ function zar({ apiUrl }) {
     initialize: ({ config }) => { },
     loaded: () => { return true; },
     pageStart: ({ payload, config, instance }) => {
-      return Object.assign({}, payload, { zar: getIds() })
+      return Object.assign({}, payload, { zar: getStorage() })
     },
     trackStart: ({ payload, config, instance }) => {
-      return Object.assign({}, payload, { zar: getIds() })
+      return Object.assign({}, payload, { zar: getStorage() })
     },
     identifyStart: ({ payload, config, instance }) => {
-      return Object.assign({}, payload, { zar: getIds() })
+      return Object.assign({}, payload, { zar: getStorage() })
     },
     page: ({ payload, options, instance, config }) => {
       console.log('page', payload, options, config);
@@ -204,7 +221,7 @@ function zar({ apiUrl }) {
     },
     identify: ({ payload, options, instance, config }) => {
       console.log('identify', payload);
-      // Not hitting custom backend on this for now
+      // No endpoint for this yet
       // const resp = axios.post(`${config.apiUrl}/identify`, payload);
     },
     reset: ({ instance }) => {
@@ -224,14 +241,17 @@ function zar({ apiUrl }) {
       getIds() {
         return getIds();
       },
-      getClientId() {
-        return getClientId();
+      getStorage() {
+        return getStorage();
       },
-      getSessionId() {
-        return getSessionId();
+      getCID() {
+        return getCID();
       },
-      getVisitId() {
-        return getVisitId();
+      getSID() {
+        return getSID();
+      },
+      getVID() {
+        return getVID();
       },
     }
   }
@@ -242,7 +262,7 @@ function getDefaultApiUrl() {
 }
 
 function init({ app, gtmContainerId, apiUrl = null, debug = false }) {
-  // Convenient opiniated init of Analytics
+  // Opiniated init of Analytics
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
   }

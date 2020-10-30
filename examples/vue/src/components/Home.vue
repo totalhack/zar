@@ -6,13 +6,17 @@
       <strong>zar</strong> example app based on an example from the
       <a href="https://github.com/davidwells/analytics">analytics module</a>
     </p>
-    <p>Click the nav to route to pages & it will trigger page views. The console has additional debug output.</p>
+    <p>
+      Click the nav to route to pages & it will trigger page views. The console
+      has additional debug output.
+    </p>
     <p>
       <a href="https://getanalytics.io/">View the analytics docs</a>
     </p>
-    <p>IDs: {{ ids }}</p>
+    <pre>{{ JSON.stringify(storage, null, 2) }}</pre>
     <button v-on:click="reset">Reset</button>
-    <button v-on:click="reloadIds">Reload IDs</button>
+    <button v-on:click="reload">Reload</button>
+    <button v-on:click="clear">Clear</button>
     <button v-on:click="page">Trigger Page</button>
     <button v-on:click="track">Trigger Track</button>
     <button v-on:click="identify">Trigger Identify</button>
@@ -22,16 +26,21 @@
 export default {
   data: function () {
     return {
-      ids: null
+      storage: null
     }
   },
   methods: {
     reset: async function () {
       await this.$analytics.reset();
-      this.ids = this.$analytics.plugins.zar.initIds();
+      this.$analytics.plugins.zar.initIds();
+      this.storage = this.$analytics.plugins.zar.getStorage();
     },
-    reloadIds: function () {
-      this.ids = this.$analytics.plugins.zar.getIds();
+    clear: async function () {
+      await this.$analytics.reset();
+      this.storage = this.$analytics.plugins.zar.getStorage();
+    },
+    reload: function () {
+      this.storage = this.$analytics.plugins.zar.getStorage();
     },
     page: function () {
       this.$analytics.page();
@@ -44,7 +53,7 @@ export default {
     }
   },
   created: function () {
-    this.ids = this.$analytics.plugins.zar.getIds();
+    this.storage = this.$analytics.plugins.zar.getStorage();
   }
 }
 </script>

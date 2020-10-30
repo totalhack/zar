@@ -1,14 +1,14 @@
 <template>
   <div class="content">
     <h1>Page Two</h1>
-    <p>IDs: {{ ids }}</p>
+    <pre>{{ JSON.stringify(storage, null, 2) }}</pre>
   </div>
 </template>
 <script>
 export default {
   computed: {
-    ids: function () {
-      return this.$analytics.plugins.zar.getIds();
+    storage: function () {
+      return this.$analytics.plugins.zar.getStorage();
     }
   }
 }
