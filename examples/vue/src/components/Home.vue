@@ -27,7 +27,7 @@ export default {
   data: function () {
     return {
       storage: null
-    }
+    };
   },
   methods: {
     reset: async function () {
@@ -46,14 +46,14 @@ export default {
       this.$analytics.page();
     },
     track: function () {
-      this.$analytics.track('event1', { attr1: 'val1', attr2: 'val2' })
+      this.$analytics.track('event1', { attr1: 'val1', attr2: 'val2' });
     },
     identify: function () {
-      this.$analytics.identify('user@example.com', { attr1: 'val1', attr2: 'val2' })
+      this.$analytics.identify('user@example.com', { attr1: 'val1', attr2: 'val2' });
     }
   },
   created: function () {
     this.storage = this.$analytics.plugins.zar.getStorage();
   }
-}
+};
 </script>

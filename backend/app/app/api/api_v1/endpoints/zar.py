@@ -32,12 +32,12 @@ def page(
     body = dict(body)
     pp(body)
     headers = extract_header_params(request.headers)
-    body["zar"] = body["zar"] or {}
     body["properties"] = body["properties"] or {}
+    zar = body["properties"].get("zar", {})
     page_obj = models.Page(
-        vid=body["zar"].get("vid", None),
-        sid=body["zar"].get("sid", None),
-        cid=body["zar"].get("cid", None),
+        vid=zar.get("vid", {}).get("id", None),
+        sid=zar.get("sid", {}).get("id", None),
+        cid=zar.get("cid", {}).get("id", None),
         uid=body["userId"],
         host=headers["host"],
         ip=headers["ip"],
@@ -59,13 +59,13 @@ def track(
     """Store track event"""
     body = dict(body)
     headers = extract_header_params(request.headers)
-    body["zar"] = body["zar"] or {}
     body["properties"] = body["properties"] or {}
+    zar = body["properties"].get("zar", {})
     track_obj = models.Track(
         event=body["event"],
-        vid=body["zar"].get("vid", None),
-        sid=body["zar"].get("sid", None),
-        cid=body["zar"].get("cid", None),
+        vid=zar.get("vid", {}).get("id", None),
+        sid=zar.get("sid", {}).get("id", None),
+        cid=zar.get("cid", {}).get("id", None),
         uid=body["userId"],
         host=headers["host"],
         ip=headers["ip"],

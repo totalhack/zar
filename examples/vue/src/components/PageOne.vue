@@ -11,5 +11,5 @@ export default {
       return this.$analytics.plugins.zar.getStorage();
     }
   }
-}
+};
 </script>

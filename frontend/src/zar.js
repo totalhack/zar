@@ -8,8 +8,8 @@ import { uuid } from './utils';
 const CID_KEY = '__zar_cid';
 const SID_KEY = '__zar_sid';
 const VID_KEY = '__zar_vid';
-const DAY_TTL = 1000 * 60 * 60 * 24 // In milliseconds
-const CID_TTL = DAY_TTL * 365 * 3 // N years, ~like GA
+const DAY_TTL = 1000 * 60 * 60 * 24; // In milliseconds
+const CID_TTL = DAY_TTL * 365 * 3; // N years, ~like GA
 const SID_TTL = DAY_TTL * 2; // N days, ~like GA
 
 function generateClientId() {
@@ -37,7 +37,7 @@ function removeSessionStorage(key) {
 }
 
 function expireByTTL(idObj, ttl, debug) {
-  const diff = Date.now() - idObj.t
+  const diff = Date.now() - idObj.t;
   if (diff >= ttl) {
     if (debug) {
       console.log('Expired after ', diff / 1000.0, 'seconds');
@@ -67,12 +67,14 @@ function expireSessionId(idObj, newVisit, debug) {
 function initId(key, expirationCallback, generator, getter, setter, newVisit, debug = false) {
   var id;
   var isNew = false;
+  var visits;
   var origReferrer = null;
   const idObj = getter(key);
 
   if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj, newVisit, debug))) {
     id = generator();
     origReferrer = document.referrer;
+    visits = 1;
     isNew = true;
     if (debug) {
       console.log('Generated ID for', key, '-', id);
@@ -80,16 +82,16 @@ function initId(key, expirationCallback, generator, getter, setter, newVisit, de
   } else {
     id = idObj.id;
     origReferrer = idObj.origReferrer;
+    visits = (idObj.visits || 1) + (newVisit ? 1 : 0);
   }
 
-  // TODO: replace isNew with hit count
-  const result = { id, t: Date.now(), origReferrer, isNew };
+  const result = { id, t: Date.now(), origReferrer, isNew, visits };
   setter(key, result);
   return result;
 }
 
 function initIds({
-  clientIdExpired = (idObj, debug) => { return expireByTTL(idObj, CID_TTL, debug) },
+  clientIdExpired = (idObj, debug) => { return expireByTTL(idObj, CID_TTL, debug); },
   sessionIdExpired = expireSessionId,
   visitIdExpired = null,
   debug = false
@@ -105,7 +107,7 @@ function initIds({
 
   var sidResult;
   const sidObj = getSIDObj(); // Checks sessionStorage
-  var sessionSid = sidObj && sidObj.id ? sidObj.id : null
+  var sessionSid = sidObj && sidObj.id ? sidObj.id : null;
   if (vidResult.isNew && sessionSid) {
     console.warn('Found old sessionStorage SID with new VID');
   }
@@ -119,17 +121,18 @@ function initIds({
   } else {
     // SID is in sessionStorage already. There should be one in analytics' storage too.
     sidResult = sidObj;
+    sidResult.visits = sidResult.visits + (vidResult.isNew ? 1 : 0);
     sidResult.isNew = false;
     const analyticsSIDObj = getSIDObj({ getter: getItem });
     if (!analyticsSIDObj || !analyticsSIDObj.id) {
       console.warn('SID missing in analytics storage, setting from sessionStorage value');
-      setItem(SID_KEY, { id: sidResult.id, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew });
+      setItem(SID_KEY, { id: sidResult.id, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew, visits: sidResult.visits });
     }
   }
   // Set/reset sessionStorage SID either way
-  setSessionStorage(SID_KEY, { id: sessionSid, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew });
+  setSessionStorage(SID_KEY, { id: sessionSid, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew, visits: sidResult.visits });
 
-  return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id }
+  return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id };
 }
 
 function getCIDObj({ getter = getItem } = {}) {
@@ -164,7 +167,7 @@ function getStorage() {
     cid: getCIDObj(),
     sid: getSIDObj(),
     vid: getVIDObj()
-  }
+  };
 }
 
 function getIds() {
@@ -172,7 +175,7 @@ function getIds() {
     cid: getCID(),
     sid: getSID(),
     vid: getVID()
-  }
+  };
 }
 
 function removeCID() {
@@ -203,26 +206,24 @@ function zar({ apiUrl }) {
     initialize: ({ config }) => { },
     loaded: () => { return true; },
     pageStart: ({ payload, config, instance }) => {
-      return Object.assign({}, payload, { zar: getStorage() })
+      payload.properties.zar = getStorage();
+      return payload;
     },
     trackStart: ({ payload, config, instance }) => {
-      return Object.assign({}, payload, { zar: getStorage() })
-    },
-    identifyStart: ({ payload, config, instance }) => {
-      return Object.assign({}, payload, { zar: getStorage() })
+      payload.properties.zar = getStorage();
+      return payload;
     },
     page: ({ payload, options, instance, config }) => {
-      console.log('page', payload, options, config);
+      if (instance.getState('context').debug) {
+        console.log('page', payload, options, config);
+      }
       const resp = axios.post(`${config.apiUrl}/page`, payload);
     },
     track: ({ payload, options, instance, config }) => {
-      console.log('track', payload);
+      if (instance.getState('context').debug) {
+        console.log('track', payload);
+      }
       const resp = axios.post(`${config.apiUrl}/track`, payload);
-    },
-    identify: ({ payload, options, instance, config }) => {
-      console.log('identify', payload);
-      // No endpoint for this yet
-      // const resp = axios.post(`${config.apiUrl}/identify`, payload);
     },
     reset: ({ instance }) => {
       removeIds();
@@ -254,7 +255,7 @@ function zar({ apiUrl }) {
         return getVID();
       },
     }
-  }
+  };
 }
 
 function getDefaultApiUrl() {
