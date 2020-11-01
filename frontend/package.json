@@ -8,12 +8,23 @@
   },
   "scripts": {
     "serve": "node src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "update-browsers": "browserslist --update-db",
+    "lint": "eslint src",
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "stats": "webpack --mode production --profile --json > ~/webpack-stats.json",
+    "stats:dev": "webpack --mode development --profile --json > ~/webpack-stats-dev.json"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/totalhack/zar.git"
   },
+  "files": [
+    "dist",
+    "lib",
+    "README.md"
+  ],
   "keywords": [
     "analytics",
     "tracking",
@@ -29,9 +40,32 @@
     "@analytics/google-tag-manager": "^0.3.0",
     "@analytics/storage-utils": "^0.2.4",
     "analytics": "^0.5.5",
-    "axios": "^0.20.0"
+    "axios": "^0.20.0",
+    "core-js": "^3.6.5"
   },
   "devDependencies": {
-    "eslint": "^7.11.0"
+    "@babel/core": "^7.12.3",
+    "@babel/preset-env": "^7.12.1",
+    "babel-loader": "^8.1.0",
+    "clean-webpack-plugin": "^3.0.0",
+    "eslint": "^7.11.0",
+    "eslint-plugin-compat": "^3.8.0",
+    "webpack": "^5.3.2",
+    "webpack-cli": "^4.1.0"
+  },
+  "browserslist": [
+    "> 0.1%, not dead"
+  ],
+  "babel": {
+    "presets": [
+      [
+        "@babel/preset-env",
+        {
+          "useBuiltIns": "usage",
+          "corejs": "3.6",
+          "debug": false
+        }
+      ]
+    ]
   }
 }
