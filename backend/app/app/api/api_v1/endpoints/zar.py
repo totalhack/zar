@@ -8,6 +8,7 @@ from tlbx import st, pp, json
 from app import models
 from app.schemas.zar import *
 from app.api import deps
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -30,7 +31,8 @@ def page(
 ) -> Dict[str, Any]:
     """Store page event"""
     body = dict(body)
-    pp(body)
+    if settings.DEBUG:
+        pp(body)
     headers = extract_header_params(request.headers)
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {})
@@ -58,6 +60,8 @@ def track(
 ) -> Dict[str, Any]:
     """Store track event"""
     body = dict(body)
+    if settings.DEBUG:
+        pp(body)
     headers = extract_header_params(request.headers)
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {})
