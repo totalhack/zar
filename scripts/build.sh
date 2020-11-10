@@ -3,8 +3,8 @@
 # Exit in case of error
 set -e
 
+DOCKER_IMAGE_BACKEND=${DOCKER_IMAGE_BACKEND?Variable not set} \
 TAG=${TAG-latest} \
-DOCKER_IMAGE_BACKEND="totalhack/zar-backend" \
 docker-compose \
 -f docker-compose.yml \
 build

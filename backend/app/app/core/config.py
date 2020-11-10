@@ -5,6 +5,7 @@ from pydantic import AnyHttpUrl, BaseSettings, HttpUrl, PostgresDsn, validator
 
 class Settings(BaseSettings):
     DEBUG: bool = False
+    ENABLE_DOCS: bool = True
     API_V1_STR: str = "/api/v1"
     SERVER_NAME: str
     SERVER_HOST: AnyHttpUrl

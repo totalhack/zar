@@ -79,3 +79,9 @@ def track(
     pk = pk[0] if pk else None
     return dict(id=pk)
 
+
+@router.get("/ok")
+def ok(request: Request) -> str:
+    """Health check"""
+    return "OK"
+

@@ -3,8 +3,8 @@ import App from './App.vue';
 import VueRouter from 'vue-router';
 import updatePageTags from './utils/updatePageTags';
 import routes from './routes';
-// import { init } from '../../../frontend/src/zar';
-import { init } from '../../../frontend/dist/zar.bundle.js';
+import { init } from '../../../frontend/src/zar';
+// import { init } from '../../../frontend/dist/zar.bundle.js';
 
 Vue.config.productionTip = false;
 Vue.use(VueRouter);
