@@ -11,6 +11,7 @@ services:
       - SERVER_NAME=${DOMAIN}
       - SERVER_HOST=https://${DOMAIN}
       - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
+      - DEBUG=${DEBUG-false}
     build:
       context: ./backend
       dockerfile: backend.dockerfile

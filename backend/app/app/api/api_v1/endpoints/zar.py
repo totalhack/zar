@@ -9,20 +9,16 @@ from app import models
 from app.schemas.zar import *
 from app.api import deps
 from app.core.config import settings
+from app.utils import extract_header_params
 
 router = APIRouter()
 
 
-def extract_header_params(headers):
-    host = headers.get("x-forwarded-host", None) or headers["host"]
-    ip = (
-        headers.get("x-forwarded-for", None)
-        or headers.get("x-real-ip", None)
-        or headers.get("forwarded", None)
-    )
-    user_agent = headers.get("user-agent", None)
-    referer = headers.get("referer", None)
-    return dict(host=host, ip=ip, user_agent=user_agent, referer=referer)
+def print_request(headers, body):
+    print("---- Headers")
+    pp(headers)
+    print("---- Body")
+    pp(body)
 
 
 @router.post("/page", response_model=Dict[str, Any])
@@ -32,7 +28,7 @@ def page(
     """Store page event"""
     body = dict(body)
     if settings.DEBUG:
-        pp(body)
+        print_request(request.headers, body)
     headers = extract_header_params(request.headers)
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {})
@@ -61,7 +57,7 @@ def track(
     """Store track event"""
     body = dict(body)
     if settings.DEBUG:
-        pp(body)
+        print_request(request.headers, body)
     headers = extract_header_params(request.headers)
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {})
