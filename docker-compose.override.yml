@@ -23,6 +23,8 @@ services:
     environment:
       - SERVER_HOST=http://${DOMAIN}
       - DEBUG=true
+    logging:
+      driver: json-file
     build:
       context: ./backend
       dockerfile: backend.dockerfile

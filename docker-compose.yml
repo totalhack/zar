@@ -12,6 +12,14 @@ services:
       - SERVER_HOST=https://${DOMAIN}
       - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
       - DEBUG=${DEBUG-false}
+    logging:
+      driver: awslogs
+      options:
+        mode: non-blocking
+        max-buffer-size: 4m
+        awslogs-region: us-east-1
+        awslogs-group: zar
+        awslogs-create-group: "true"
     build:
       context: ./backend
       dockerfile: backend.dockerfile
