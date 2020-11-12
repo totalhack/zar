@@ -12,6 +12,9 @@ services:
       - SERVER_HOST=https://${DOMAIN}
       - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
       - DEBUG=${DEBUG-false}
+      - ROLLBAR_ENABLED=${ROLLBAR_ENABLED}
+      - ROLLBAR_ENV=${ROLLBAR_ENV}
+      - ROLLBAR_KEY=${ROLLBAR_KEY}
     logging:
       driver: awslogs
       options:

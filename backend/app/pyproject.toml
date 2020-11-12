@@ -21,6 +21,7 @@ tlbx = ">= 0.1.14"
 # https://github.com/python-poetry/poetry/issues/2687
 black = "^19.10b0"
 orjson = "^3.3.0"
+rollbar = "^0.15.1"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.770"

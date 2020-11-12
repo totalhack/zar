@@ -6,6 +6,7 @@ from pydantic import AnyHttpUrl, BaseSettings, HttpUrl, PostgresDsn, validator
 class Settings(BaseSettings):
     DEBUG: bool = False
     ENABLE_DOCS: bool = True
+
     API_V1_STR: str = "/api/v1"
     SERVER_NAME: str
     SERVER_HOST: AnyHttpUrl
@@ -24,6 +25,10 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str
     SQLALCHEMY_DATABASE_URI: str
+
+    ROLLBAR_ENABLED: bool = True
+    ROLLBAR_ENV: str
+    ROLLBAR_KEY: str
 
     class Config:
         case_sensitive = True
