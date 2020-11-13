@@ -15,6 +15,7 @@ services:
       - ROLLBAR_ENABLED=${ROLLBAR_ENABLED}
       - ROLLBAR_ENV=${ROLLBAR_ENV}
       - ROLLBAR_KEY=${ROLLBAR_KEY}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
     logging:
       driver: awslogs
       options:
