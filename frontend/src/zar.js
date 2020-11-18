@@ -1,5 +1,6 @@
 import { Analytics } from 'analytics';
 import { getItem, setItem, removeItem } from '@analytics/storage-utils';
+import googleAnalytics from '@analytics/google-analytics';
 import googleTagManager from '@analytics/google-tag-manager';
 import axios from 'axios';
 
@@ -262,8 +263,8 @@ function getDefaultApiUrl() {
   return window.location.origin + '/api/v1';
 }
 
-function init({ app, gtmContainerId, apiUrl = null, debug = false }) {
-  // Opiniated init of Analytics
+function init({ app, gtmConfig, gaConfig, apiUrl = null, debug = false }) {
+  // Opiniated init of Analytics - Loads GA and GTM separately
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
   }
@@ -272,13 +273,12 @@ function init({ app, gtmContainerId, apiUrl = null, debug = false }) {
     debug,
     plugins: [
       zar({ apiUrl }),
-      googleTagManager({
-        containerId: gtmContainerId
-      })
+      googleAnalytics(gaConfig),
+      googleTagManager(gtmConfig)
     ]
   });
 }
 
-export { init, zar };
+export { init, zar, Analytics };
 
 

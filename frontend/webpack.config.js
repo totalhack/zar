@@ -18,6 +18,7 @@ module.exports = {
   externals: {
     // 'analytics': 'analytics',
     // '@analytics/storage-utils': '@analytics/storage-utils',
+    // '@analytics/google-analytics': '@analytics/google-analytics',
     // '@analytics/google-tag-manager': '@analytics/google-tag-manager',
     // 'axios': 'axios',
   },
