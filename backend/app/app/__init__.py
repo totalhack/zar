@@ -75,7 +75,7 @@ class ORJSONResponse(JSONResponse):
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.ENABLE_DOCS else None,
     docs_url=None,  # Swagger docs
     redoc_url="/docs" if settings.ENABLE_DOCS else None,  # redocs
     default_response_class=ORJSONResponse,
