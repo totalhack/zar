@@ -264,7 +264,7 @@ function getDefaultApiUrl() {
 }
 
 function init({ app, gtmConfig, gaConfig, apiUrl = null, debug = false }) {
-  // Opiniated init of Analytics - Loads GA and GTM separately
+  // Opinionated init of Analytics - Loads GA and GTM separately
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
   }
