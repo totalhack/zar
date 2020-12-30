@@ -232,12 +232,12 @@ function zar({ apiUrl }) {
     bootstrap: ({ payload, config, instance }) => {
       // TODO: ability to override initIds params with zar() args
       const result = initIds({ debug: instance.getState('context').debug });
-      instance.setAnonymousId(result.cid); // Override analytics' anonymouse ID with client ID
+      instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
     },
     methods: {
       initIds() {
         const result = initIds({ debug: this.instance.getState('context').debug });
-        this.instance.setAnonymousId(result.cid); // Override analytics' anonymouse ID with client ID
+        this.instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
         return result;
       },
       getIds() {
