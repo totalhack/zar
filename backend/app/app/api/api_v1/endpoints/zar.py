@@ -23,7 +23,9 @@ def print_request(headers, body):
 
 @router.post("/page", response_model=Dict[str, Any])
 def page(
-    body: PageRequestBody, request: Request, db: Generator = Depends(deps.get_db),
+    body: PageRequestBody,
+    request: Request,
+    db: Generator = Depends(deps.get_db),
 ) -> Dict[str, Any]:
     """Store page event"""
     body = dict(body)
@@ -31,7 +33,7 @@ def page(
         print_request(request.headers, body)
     headers = extract_header_params(request.headers)
     body["properties"] = body["properties"] or {}
-    zar = body["properties"].get("zar", {})
+    zar = body["properties"].get("zar", {}) or {}
     page_obj = models.Page(
         vid=zar.get("vid", {}).get("id", None),
         sid=zar.get("sid", {}).get("id", None),
@@ -52,7 +54,9 @@ def page(
 
 @router.post("/track", response_model=Dict[str, Any])
 def track(
-    body: TrackRequestBody, request: Request, db: Generator = Depends(deps.get_db),
+    body: TrackRequestBody,
+    request: Request,
+    db: Generator = Depends(deps.get_db),
 ) -> Dict[str, Any]:
     """Store track event"""
     body = dict(body)
@@ -84,4 +88,3 @@ def track(
 def ok(request: Request) -> str:
     """Health check"""
     return "OK"
-
