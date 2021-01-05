@@ -21,6 +21,16 @@ def print_request(headers, body):
     pp(body)
 
 
+def get_zar_ids(zar):
+    vid_dict = zar.get("vid", {})
+    sid_dict = zar.get("sid", {})
+    cid_dict = zar.get("cid", {})
+    vid = vid_dict.get("id", None) if vid_dict else None
+    sid = sid_dict.get("id", None) if sid_dict else None
+    cid = cid_dict.get("id", None) if cid_dict else None
+    return vid, sid, cid
+
+
 @router.post("/page", response_model=Dict[str, Any])
 def page(
     body: PageRequestBody,
@@ -34,10 +44,11 @@ def page(
     headers = extract_header_params(request.headers)
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {}) or {}
+    vid, sid, cid = get_zar_ids(zar)
     page_obj = models.Page(
-        vid=zar.get("vid", {}).get("id", None),
-        sid=zar.get("sid", {}).get("id", None),
-        cid=zar.get("cid", {}).get("id", None),
+        vid=vid,
+        sid=sid,
+        cid=cid,
         uid=body["userId"],
         host=headers["host"],
         ip=headers["ip"],
@@ -63,13 +74,19 @@ def track(
     if settings.DEBUG:
         print_request(request.headers, body)
     headers = extract_header_params(request.headers)
+
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {})
+    vid, sid, cid = get_zar_ids(zar)
+    if "zar" in body["properties"]:
+        # Can get this data from the page/visit info
+        del body["properties"]["zar"]
+
     track_obj = models.Track(
         event=body["event"],
-        vid=zar.get("vid", {}).get("id", None),
-        sid=zar.get("sid", {}).get("id", None),
-        cid=zar.get("cid", {}).get("id", None),
+        vid=vid,
+        sid=sid,
+        cid=cid,
         uid=body["userId"],
         host=headers["host"],
         ip=headers["ip"],
