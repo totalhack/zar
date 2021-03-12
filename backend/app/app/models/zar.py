@@ -1,7 +1,4 @@
-from typing import TYPE_CHECKING
-
-from sqlalchemy import Boolean, Column, BigInteger, Integer, Text, String, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, BigInteger, Text, String, DateTime
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
@@ -34,4 +31,3 @@ class Track(Base):
     referer = Column(String(2048), nullable=True)
     properties = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
-

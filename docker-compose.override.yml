@@ -24,6 +24,12 @@ services:
       - ./backend/app:/app
     environment:
       - SERVER_HOST=http://${DOMAIN}
+      - SERVER_HOST=https://${DOMAIN}
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
+      - ROLLBAR_ENABLED=${ROLLBAR_ENABLED}
+      - ROLLBAR_ENV=${ROLLBAR_ENV}
+      - ROLLBAR_KEY=${ROLLBAR_KEY}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
       - DEBUG=true
     logging:
       driver: json-file
