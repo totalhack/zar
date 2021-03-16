@@ -2,7 +2,7 @@ version: "3.8"
 services:
 
   db:
-    image: mysql:5.7.5
+    image: mysql:5.7.12
     ports:
       - "3306:3306"
     command: --default-authentication-plugin=mysql_native_password
