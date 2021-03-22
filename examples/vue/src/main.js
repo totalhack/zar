@@ -4,6 +4,7 @@ import VueRouter from 'vue-router';
 import updatePageTags from './utils/updatePageTags';
 import routes from './routes';
 import { init } from '../../../frontend/src/zar';
+// To test from built dist bundle:
 // import { init } from '../../../frontend/dist/zar.bundle.js';
 
 Vue.config.productionTip = false;
@@ -27,6 +28,7 @@ const analytics = init({
 
 analytics.on('ready', () => {
   console.log('GA', window.ga);
+  console.log('hasAdBlock', analytics.plugins.zar.hasAdBlock());
 });
 
 Vue.prototype.$analytics = analytics;

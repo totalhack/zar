@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Zillion Analytics Recorder",
   "main": "zar.js",
   "publishConfig": {
@@ -41,7 +41,8 @@
     "@analytics/google-tag-manager": "^0.3.0",
     "@analytics/storage-utils": "^0.2.4",
     "analytics": "^0.5.5",
-    "axios": "^0.20.0",
+    "analytics-utils": "^0.4.4",
+    "axios": "^0.21.1",
     "core-js": "^3.6.5"
   },
   "devDependencies": {

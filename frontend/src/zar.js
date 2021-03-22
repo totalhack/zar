@@ -4,7 +4,7 @@ import googleAnalytics from '@analytics/google-analytics';
 import googleTagManager from '@analytics/google-tag-manager';
 import axios from 'axios';
 
-import { uuid } from './utils';
+import { uuid, hasAdBlock } from './utils';
 
 const CID_KEY = '__zar_cid';
 const SID_KEY = '__zar_sid';
@@ -208,6 +208,16 @@ function zar({ apiUrl }) {
     loaded: () => { return true; },
     pageStart: ({ payload, config, instance }) => {
       payload.properties.zar = getStorage();
+      // Remove redundant values since url has all of this
+      if ("hash" in payload.properties) {
+        delete payload.properties["hash"];
+      }
+      if ("path" in payload.properties) {
+        delete payload.properties["path"];
+      }
+      if ("search" in payload.properties) {
+        delete payload.properties["search"];
+      }
       return payload;
     },
     trackStart: ({ payload, config, instance }) => {
@@ -254,6 +264,9 @@ function zar({ apiUrl }) {
       },
       getVID() {
         return getVID();
+      },
+      hasAdBlock() {
+        return hasAdBlock();
       },
     }
   };
