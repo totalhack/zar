@@ -20,3 +20,18 @@ class TrackRequestBody(BaseModel):
     options: Dict[str, Any] = None
     meta: Dict[str, Any] = None
 
+
+class NumberPoolRequestBody(BaseModel):
+    pool_id: int
+    number: str = None
+    context: Dict[str, Any] = None
+    properties: Dict[str, Any] = None
+    options: Dict[str, Any] = None
+    meta: Dict[str, Any] = None
+
+
+class NumberPoolCacheValue(BaseModel):
+    pool_id: int
+    leased_at: float
+    renewed_at: float
+    request_context: Dict[str, Any] = None

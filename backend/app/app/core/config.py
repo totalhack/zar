@@ -26,9 +26,15 @@ class Settings(BaseSettings):
     PROJECT_NAME: str
     SQLALCHEMY_DATABASE_URI: str
 
+    REDIS_HOST: str
+    REDIS_PASSWORD: str
+
     ROLLBAR_ENABLED: bool = True
     ROLLBAR_ENV: str
     ROLLBAR_KEY: str
+
+    NUMBER_POOL_ENABLED: bool = False
+    NUMBER_POOL_KEY: str
 
     class Config:
         case_sensitive = True

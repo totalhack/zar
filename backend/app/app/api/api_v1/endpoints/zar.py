@@ -1,16 +1,33 @@
 from typing import Generator, Dict, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.inspection import inspect
-from tlbx import st, json
+from tlbx import st, json, info, warn
 
 from app import models
-from app.schemas.zar import *
+from app.schemas.zar import PageRequestBody, TrackRequestBody, NumberPoolRequestBody
 from app.api import deps
 from app.core.config import settings
+from app.number_pool import (
+    NumberPoolAPI,
+    NumberPoolResponseStatus,
+    NumberPoolResponseMessages,
+    NumberPoolUnavailable,
+    NumberPoolEmpty,
+    NumberNotFound,
+    NumberMaxRenewalExceeded,
+)
 from app.utils import print_request, extract_header_params, create_zar_dict, get_zar_ids
 
 router = APIRouter()
+
+# TODO add config to skip this
+pool_api = None
+if settings.NUMBER_POOL_ENABLED:
+    try:
+        pool_api = NumberPoolAPI()
+    except NumberPoolUnavailable as e:
+        warn(str(e))
 
 
 @router.post("/page", response_model=Dict[str, Any])
@@ -116,6 +133,107 @@ def noscript(
     pk = inspect(page_obj).identity
     pk = pk[0] if pk else None
     return dict(id=pk)
+
+
+@router.post("/number_pool", response_model=Dict[str, Any])
+def number_pool(body: NumberPoolRequestBody, request: Request) -> Dict[str, Any]:
+    body = dict(body)
+    if settings.DEBUG:
+        print_request(request.headers, body)
+    headers = extract_header_params(request.headers)
+
+    zar = body["properties"].get("zar", {}) or {}
+    vid, sid, cid = get_zar_ids(zar)
+    if not sid:
+        warn(f"No SID")
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            number=None,
+            msg=NumberPoolResponseMessages.NO_SID,
+        )
+
+    pool_id = body["pool_id"]
+    number = body["number"] or None
+    context = body["context"] or {}
+    request_context = dict(
+        sid=sid,
+        sid_original_referer=zar["sid"].get("origReferrer", None),
+        ip=headers["ip"],
+        user_agent=headers["user_agent"],
+        referer=headers["referer"],
+        host=headers["host"],
+        visits={vid: context},
+    )
+
+    global pool_api
+    if not pool_api:
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            number=None,
+            msg=NumberPoolResponseMessages.UNAVAILABLE,
+        )
+
+    try:
+        res = pool_api.lease_number(
+            pool_id,
+            request_context,
+            target_number=number,
+            renew=True if number else False,
+        )
+    except NumberPoolEmpty as e:
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            number=None,
+            msg=NumberPoolResponseMessages.EMPTY,
+        )
+    except NumberNotFound as e:
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            number=None,
+            msg=NumberPoolResponseMessages.NOT_FOUND,
+        )
+    except NumberMaxRenewalExceeded as e:
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            number=None,
+            msg=NumberPoolResponseMessages.MAX_RENEWAL,
+        )
+
+    return dict(status=NumberPoolResponseStatus.SUCCESS, number=res, msg=None)
+
+
+@router.get("/refresh_number_pool_conn", response_model=Dict[str, Any])
+def refresh_number_pool_conn(request: Request, key: str) -> Dict[str, Any]:
+    if (not key) or (key != settings.NUMBER_POOL_KEY):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    global pool_api
+    if not pool_api:
+        return dict(status=NumberPoolResponseStatus.UNAVAILABLE)
+    pool_api.refresh_conn()
+    return dict(status=NumberPoolResponseStatus.SUCCESS)
+
+
+@router.get("/init_number_pools", response_model=Dict[str, Any])
+def init_number_pools(request: Request, key: str) -> Dict[str, Any]:
+    if (not key) or (key != settings.NUMBER_POOL_KEY):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    global pool_api
+    if not pool_api:
+        return dict(status=NumberPoolResponseStatus.UNAVAILABLE)
+    res = pool_api.init_pools()
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=json.dumps(res))
+
+
+@router.get("/number_pool_stats", response_model=Dict[str, Any])
+def number_pool_stats(
+    request: Request, key: str, with_contexts: bool = False
+) -> Dict[str, Any]:
+    if (not key) or (key != settings.NUMBER_POOL_KEY):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    global pool_api
+    if not pool_api:
+        return dict(status=NumberPoolResponseStatus.UNAVAILABLE)
+    return pool_api.get_all_pool_stats(with_contexts=with_contexts)
 
 
 @router.get("/ok")

@@ -34,7 +34,9 @@ uvicorn.protocols.utils.get_client_addr = get_real_client_addr
 
 
 LOG_FORMAT = "%(asctime)s [%(process)s] %(levelname)s: %(message)s"
+LOG_LEVEL = "INFO"
 if settings.DEBUG:
+    LOG_LEVEL = "DEBUG"
     LOG_FORMAT = (
         "%(asctime)s [%(process)s] %(levelname)s %(name)s:%(module)s: %(message)s"
     )
@@ -51,7 +53,7 @@ LOG_CONFIG = {
             "level": "INFO",
         }
     },
-    "root": {"handlers": ["console"], "level": "INFO"},
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
     "loggers": {
         "gunicorn": {"propagate": True},
         "gunicorn.access": {"propagate": True},

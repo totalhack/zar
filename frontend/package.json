@@ -2,12 +2,12 @@
   "name": "zar",
   "version": "0.0.3",
   "description": "Zillion Analytics Recorder",
-  "main": "zar.js",
+  "main": "dist/zar.bundle.js",
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "serve": "node src/index.js",
+    "serve": "node src/zar.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "update-browsers": "browserslist --update-db",
     "lint": "eslint src",

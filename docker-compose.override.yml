@@ -20,6 +20,9 @@ services:
     tty: true
     ports:
       - "80:80" 
+    depends_on:
+      - db
+      - redis
     volumes:
       - ./backend/app:/app
     environment:

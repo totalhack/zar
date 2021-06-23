@@ -16,6 +16,10 @@ services:
       - ROLLBAR_ENV=${ROLLBAR_ENV}
       - ROLLBAR_KEY=${ROLLBAR_KEY}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+      - REDIS_HOST=${REDIS_HOST-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - NUMBER_POOL_ENABLED=${NUMBER_POOL_ENABLED-false}
+      - NUMBER_POOL_KEY=${NUMBER_POOL_KEY}
     logging:
       driver: awslogs
       options:
@@ -30,3 +34,8 @@ services:
       args:
         INSTALL_DEV: ${INSTALL_DEV-false}
 
+  redis:
+    image: "redis:alpine"
+    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    ports:
+      - "6379"
