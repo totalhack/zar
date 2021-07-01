@@ -5,16 +5,26 @@
         <router-link to="/">Home</router-link>
         <router-link to="/one">Page One</router-link>
         <router-link to="/two">Page Two</router-link>
+        <router-link
+          key="number-pool-1"
+          :to="{ name: 'number-pool-1', query: { pl: 1 } }"
+          >Number Pool 1</router-link
+        >
+        <router-link
+          key="number-pool-2"
+          :to="{ name: 'number-pool-2', query: { pl: 1 } }"
+          >Number Pool 2</router-link
+        >
+        <router-link to="/number-pool-stats">Number Pool Stats</router-link>
         <a href="http://localhost:8080/">Regular Link Home</a>
       </nav>
     </div>
-    <router-view />
+    <router-view :key="$route.fullPath"></router-view>
   </div>
 </template>
 
 <script>
-export default {
-}
+export default {};
 </script>
 
 <style>

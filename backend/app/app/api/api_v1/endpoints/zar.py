@@ -203,8 +203,8 @@ def number_pool(body: NumberPoolRequestBody, request: Request) -> Dict[str, Any]
 
 
 @router.get("/refresh_number_pool_conn", response_model=Dict[str, Any])
-def refresh_number_pool_conn(request: Request, key: str) -> Dict[str, Any]:
-    if (not key) or (key != settings.NUMBER_POOL_KEY):
+def refresh_number_pool_conn(request: Request, key: str = None) -> Dict[str, Any]:
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
         raise HTTPException(status_code=403, detail="Forbidden")
     global pool_api
     if not pool_api:
@@ -214,8 +214,8 @@ def refresh_number_pool_conn(request: Request, key: str) -> Dict[str, Any]:
 
 
 @router.get("/init_number_pools", response_model=Dict[str, Any])
-def init_number_pools(request: Request, key: str) -> Dict[str, Any]:
-    if (not key) or (key != settings.NUMBER_POOL_KEY):
+def init_number_pools(request: Request, key: str = None) -> Dict[str, Any]:
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
         raise HTTPException(status_code=403, detail="Forbidden")
     global pool_api
     if not pool_api:
@@ -226,9 +226,9 @@ def init_number_pools(request: Request, key: str) -> Dict[str, Any]:
 
 @router.get("/number_pool_stats", response_model=Dict[str, Any])
 def number_pool_stats(
-    request: Request, key: str, with_contexts: bool = False
+    request: Request, key: str = None, with_contexts: bool = False
 ) -> Dict[str, Any]:
-    if (not key) or (key != settings.NUMBER_POOL_KEY):
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
         raise HTTPException(status_code=403, detail="Forbidden")
     global pool_api
     if not pool_api:

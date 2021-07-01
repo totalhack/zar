@@ -26,8 +26,10 @@ async def catch_exceptions_middleware(request: Request, call_next):
         if settings.ROLLBAR_ENABLED:
             rollbar.report_exc_info()
         if settings.DEBUG:
-            return Response(tb.format_exc(), status_code=500)
-        return Response("Internal server error", status_code=500)
+            return Response(tb.format_exc(), status_code=500, media_type="text/plain")
+        return Response(
+            "Internal server error", status_code=500, media_type="text/plain"
+        )
 
 
 app.middleware("http")(catch_exceptions_middleware)

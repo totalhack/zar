@@ -47,5 +47,4 @@ function hasAdBlock() {
   return false;
 }
 
-
 export { uuid, hasAdBlock };

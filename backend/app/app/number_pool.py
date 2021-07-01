@@ -482,7 +482,9 @@ class NumberPoolAPI:
             target_number, renewed_at = res
             status, _ = self.get_number_status(target_number)
             if status == NumberStatus.EXPIRED:
-                return self._lease_expired_number(pool_id, number, request_context)
+                return self._lease_expired_number(
+                    pool_id, target_number, request_context
+                )
             else:
                 return None
 

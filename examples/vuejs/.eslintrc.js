@@ -1,13 +1,14 @@
 module.exports = {
     "env": {
         "node": true,
+        "es2017": true
     },
     "extends": [
         "eslint:recommended",
         "plugin:vue/essential"
     ],
     "parserOptions": {
-        "ecmaVersion": 10,
+        "ecmaVersion": 8,
         "sourceType": "module"
     },
     "plugins": [
