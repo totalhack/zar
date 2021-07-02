@@ -1,37 +1,64 @@
 const path = require('path');
-const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+const { merge } = require('webpack-merge');
 
-module.exports = {
+const BASE = {
   entry: './src/zar.js',
-  module: {
-    rules: [
-      {
-        test: /\.(js)$/,
-        exclude: /node_modules/,
-        use: ['babel-loader']
-      }
-    ]
-  },
-  optimization: {
-    // minimize: false,
-  },
-  externals: {
-    // 'analytics': 'analytics',
-    // '@analytics/storage-utils': '@analytics/storage-utils',
-    // '@analytics/google-analytics': '@analytics/google-analytics',
-    // '@analytics/google-tag-manager': '@analytics/google-tag-manager',
-    // 'axios': 'axios',
-  },
+  mode: "production",
   resolve: {
     extensions: ['*', '.js']
   },
-  plugins: [
-    new CleanWebpackPlugin(),
-  ],
   output: {
     library: 'zar',
     libraryTarget: 'umd',
-    filename: 'zar.bundle.js',
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, 'dist')
   },
 };
+
+module.exports = [
+  merge(BASE,
+    {
+      name: 'modern',
+      module: {
+        rules: [
+          {
+            test: /\.(js)$/,
+            exclude: /node_modules/,
+            use: [
+              {
+                loader: "babel-loader",
+                options: {
+                  envName: 'modern'
+                }
+              }
+            ]
+          }
+        ]
+      },
+      output: {
+        filename: 'zar.modern.bundle.js'
+      },
+    }),
+  merge(BASE,
+    {
+      name: 'full',
+      module: {
+        rules: [
+          {
+            test: /\.(js)$/,
+            exclude: /node_modules/,
+            use: [
+              {
+                loader: "babel-loader",
+                options: {
+                  envName: 'full'
+                }
+              }
+            ]
+          }
+        ]
+      },
+      output: {
+        filename: 'zar.bundle.js'
+      },
+    })
+];

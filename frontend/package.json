@@ -11,8 +11,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "update-browsers": "browserslist --update-db",
     "lint": "eslint src",
-    "build": "webpack --mode production",
-    "build:dev": "webpack --mode development",
+    "build": "rm dist/*; webpack --mode production",
+    "build:dev": "rm dist/*; webpack --mode development",
     "stats": "webpack --mode production --profile --json > ~/webpack-stats.json",
     "stats:dev": "webpack --mode development --profile --json > ~/webpack-stats-dev.json"
   },
@@ -22,7 +22,6 @@
   },
   "files": [
     "dist",
-    "lib",
     "README.md"
   ],
   "keywords": [
@@ -39,10 +38,7 @@
   "dependencies": {
     "@analytics/google-analytics": "^0.5.2",
     "@analytics/google-tag-manager": "^0.3.0",
-    "@analytics/storage-utils": "^0.2.4",
     "analytics": "^0.5.5",
-    "analytics-utils": "^0.4.4",
-    "axios": "^0.21.1",
     "core-js": "^3.6.5"
   },
   "devDependencies": {
@@ -53,21 +49,35 @@
     "eslint": "^7.11.0",
     "eslint-plugin-compat": "^3.8.0",
     "webpack": "^5.3.2",
-    "webpack-cli": "^4.1.0"
+    "webpack-cli": "^4.1.0",
+    "webpack-merge": "^5.8.0"
   },
-  "browserslist": [
-    "> 0.1%, not dead"
-  ],
   "babel": {
-    "presets": [
-      [
-        "@babel/preset-env",
-        {
-          "useBuiltIns": "usage",
-          "corejs": "3.6",
-          "debug": false
-        }
-      ]
-    ]
+    "env": {
+      "modern": {
+        "presets": [
+          [
+            "@babel/preset-env",
+            {
+              "useBuiltIns": "usage",
+              "corejs": "3.6",
+              "targets": "> 1%"
+            }
+          ]
+        ]
+      },
+      "full": {
+        "presets": [
+          [
+            "@babel/preset-env",
+            {
+              "useBuiltIns": "usage",
+              "corejs": "3.6",
+              "targets": "> 0.1%, not dead"
+            }
+          ]
+        ]
+      }
+    }
   }
 }

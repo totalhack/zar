@@ -1,7 +1,7 @@
 module.exports = {
     "env": {
         "node": true,
-        "es2017": true
+        "es6": true
     },
     "extends": [
         "eslint:recommended",
@@ -15,9 +15,12 @@ module.exports = {
         "vue"
     ],
     "rules": {
+        "semi": 0,
         "no-console": 0,
         "no-unused-vars": 0,
-        "no-debugger": 0,
-        "semi": [2, "always"],
+        "no-debugger": 0
+    },
+    "settings": {
+        "polyfills": ["Promise"]
     }
 };

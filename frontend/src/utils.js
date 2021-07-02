@@ -1,3 +1,5 @@
+// Much in here is copied from analytics-utils to keep bundle size down
+
 /* ref: http://bit.ly/2daP79j */
 var lut = []; for (var i = 0; i < 256; i++) { lut[i] = (i < 16 ? '0' : '') + (i).toString(16); }
 
@@ -12,10 +14,16 @@ function uuid() {
     lut[d3 & 0xff] + lut[d3 >> 8 & 0xff] + lut[d3 >> 16 & 0xff] + lut[d3 >> 24 & 0xff];
 }
 
-
 const inBrowser = typeof document !== 'undefined';
 
-// Copied from analytics-utils/src/detectAdBlock.js
+function decode(s) {
+  try {
+    return decodeURIComponent(s.replace(/\+/g, ' '));
+  } catch (e) {
+    return null;
+  }
+}
+
 function hasAdBlock() {
   if (!inBrowser) return false;
   // Create fake ad
@@ -47,4 +55,118 @@ function hasAdBlock() {
   return false;
 }
 
-export { uuid, hasAdBlock };
+
+function getSearchString(url) {
+  if (url) {
+    const p = url.match(/\?(.*)/);
+    return (p && p[1]) ? p[1].split('#')[0] : '';
+  }
+  return inBrowser && window.location.search.substring(1);
+}
+
+export default function paramsParse(url) {
+  return getParamsAsObject(getSearchString(url));
+}
+
+
+function getParamsAsObject(query) {
+  let params = {};
+  let temp;
+  const re = /([^&=]+)=?([^&]*)/g;
+
+  // eslint-disable-next-line
+  while (temp = re.exec(query)) {
+    var k = decode(temp[1]);
+    var v = decode(temp[2]);
+    if (k.substring(k.length - 2) === '[]') {
+      k = k.substring(0, k.length - 2);
+      (params[k] || (params[k] = [])).push(v);
+    } else {
+      params[k] = (v === '') ? true : v;
+    }
+  }
+
+  for (var prop in params) {
+    var arr = prop.split('[');
+    if (arr.length > 1) {
+      assign(params, arr.map((x) => x.replace(/[?[\]\\ ]/g, '')), params[prop]);
+      delete params[prop];
+    }
+  }
+  return params;
+}
+
+function assign(obj, keyPath, value) {
+  var lastKeyIndex = keyPath.length - 1;
+  for (var i = 0; i < lastKeyIndex; ++i) {
+    var key = keyPath[i];
+    if (!(key in obj)) {
+      obj[key] = {};
+    }
+    obj = obj[key];
+  }
+  obj[keyPath[lastKeyIndex]] = value;
+}
+
+function makeRequest({ method, url, data = null, json = true }) {
+  return new Promise(function (resolve, reject) {
+    let xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+
+    if (json) {
+      xhr.setRequestHeader("Accept", "application/json");
+      xhr.setRequestHeader("Content-Type", "application/json");
+    }
+
+    xhr.onload = function () {
+      if (this.status >= 200 && this.status < 300) {
+        if (json) {
+          resolve(JSON.parse(xhr.response));
+        } else {
+          resolve(xhr.response);
+        }
+      } else {
+        reject({
+          status: this.status,
+          message: xhr.statusText
+        });
+      }
+    };
+    xhr.onerror = function () {
+      reject({
+        status: this.status,
+        message: "Network Error"
+      });
+    };
+    if (data) {
+      xhr.send(data);
+    } else {
+      xhr.send();
+    }
+  });
+}
+
+function formatParams(params) {
+  return "?" + Object
+    .keys(params)
+    .map(function (key) {
+      return key + "=" + encodeURIComponent(params[key]);
+    })
+    .join("&");
+}
+
+async function httpGet({ url, params = null, json = true }) {
+  if (params) {
+    url = url + formatParams(params);
+  }
+  return await makeRequest({ method: "GET", url, json });
+}
+
+async function httpPost({ url, data, json = true }) {
+  if (json) {
+    data = JSON.stringify(data);
+  }
+  return await makeRequest({ method: "POST", url, data, json });
+}
+
+export { uuid, hasAdBlock, paramsParse, httpGet, httpPost };

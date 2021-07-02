@@ -1,11 +1,9 @@
 import { Analytics } from 'analytics';
 import { getItem, setItem, removeItem } from '@analytics/storage-utils';
-import { paramsParse } from 'analytics-utils';
 import googleAnalytics from '@analytics/google-analytics';
 import googleTagManager from '@analytics/google-tag-manager';
-import axios from 'axios';
 
-import { uuid, hasAdBlock } from './utils';
+import { uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
 
 const CID_KEY = '__zar_cid';
 const SID_KEY = '__zar_sid';
@@ -21,6 +19,7 @@ const SID_TTL = DAY_TTL * 2; // N days, ~like GA
 
 // Tracks original phone numbers that have been replaced so
 // we can revert if necessary.
+// eslint-disable-next-line
 let numberOverlayMap = new Map();
 
 function generateClientId() {
@@ -159,8 +158,8 @@ async function getPoolNumber({ poolId, apiUrl, number = null, context = null }) 
       zar: getStorage()
     }
   };
-  const resp = await axios.post(`${apiUrl}/number_pool`, payload);
-  return resp.data;
+  const resp = await httpPost({ url: `${apiUrl}/number_pool`, data: payload });
+  return resp;
 }
 
 async function getPoolStats({ apiUrl, key = null, with_contexts = false }) {
@@ -168,8 +167,8 @@ async function getPoolStats({ apiUrl, key = null, with_contexts = false }) {
     key,
     with_contexts
   };
-  const resp = await axios.get(`${apiUrl}/number_pool_stats`, { params });
-  return resp.data;
+  const resp = await httpGet({ url: `${apiUrl}/number_pool_stats`, params: params });
+  return resp;
 }
 
 function extractPhoneNumber({ elem }) {
@@ -322,7 +321,7 @@ async function initTrackingPool({
     // call with an error, this would allow the retries to just start working again
     // once the service is back up. If it is the first call and the interval has never
     // been set, the service wouldn't retry unless initTrackingPool was called again.
-    console.warn("pool: error getting number:", e.message);
+    console.warn("pool: error getting number:", e);
     return { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
   }
 
@@ -464,13 +463,13 @@ function zar({ apiUrl }) {
       if (instance.getState('context').debug) {
         console.log('page', payload, options, config);
       }
-      const resp = axios.post(`${config.apiUrl}/page`, payload);
+      httpPost({ url: `${config.apiUrl}/page`, data: payload });
     },
     track: ({ payload, options, instance, config }) => {
       if (instance.getState('context').debug) {
         console.log('track', payload);
       }
-      const resp = axios.post(`${config.apiUrl}/track`, payload);
+      httpPost({ url: `${config.apiUrl}/track`, data: payload });
     },
     reset: ({ instance }) => {
       removeIds();

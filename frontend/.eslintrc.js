@@ -1,7 +1,7 @@
 module.exports = {
     "env": {
         "browser": true,
-        "es2017": true
+        "es6": true
     },
     "extends": ["eslint:recommended", "plugin:compat/recommended"],
     "parserOptions": {
@@ -13,5 +13,8 @@ module.exports = {
         "no-unused-vars": 0,
         "no-debugger": 0,
         "semi": [2, "always"],
+    },
+    "settings": {
+        "polyfills": ["Promise"]
     }
 };
