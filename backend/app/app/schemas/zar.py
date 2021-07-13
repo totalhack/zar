@@ -21,6 +21,13 @@ class TrackRequestBody(BaseModel):
     meta: Dict[str, Any] = None
 
 
+class TrackCallRequestBody(BaseModel):
+    key: str
+    call_id: str
+    call_from: str
+    call_to: str
+
+
 class NumberPoolRequestBody(BaseModel):
     pool_id: int
     number: str = None

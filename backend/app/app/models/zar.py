@@ -33,6 +33,17 @@ class Track(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
 
 
+class TrackCall(Base):
+    __tablename__ = "track_call"
+
+    id = Column(BigInteger, primary_key=True)
+    call_id = Column(String(64), index=True, nullable=False)
+    call_from = Column(String(15), index=True, nullable=False)
+    call_to = Column(String(15), nullable=False)
+    number_context = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
+
 class Pools(Base):
     __tablename__ = "pools"
 

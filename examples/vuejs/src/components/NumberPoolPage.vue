@@ -3,20 +3,25 @@
     <h1>Number Pool</h1>
     <pre>{{ JSON.stringify(storage, null, 2) }}</pre>
     <button v-on:click="initPool">Init Pool</button>
+    <button v-on:click="overlayPhoneNumber">Static Overlay</button>
     <button v-on:click="revertOverlay">Revert Overlay</button>
     <button v-on:click="removePoolSession">Remove Session</button>
     <br />
-    <a href="tel:+18555660155" data-cta-attr="phone" class="button cta"
-      ><span>855-566-0155</span></a
+    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"
+      ><span>999-123-1234</span></a
     >
     <br />
-    <a href="tel:+18555660155" data-cta-attr="phone" class="button cta"
-      ><span>Call 855-566-0155 link</span></a
+    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"
+      ><span>Call 999-123-1234 link</span></a
     >
     <br />
-    <span data-cta-attr="phone" class="button cta">855-566-0155</span>
+    <span data-cta-attr="phone" class="button cta">999-123-1234</span>
     <br />
-    <span data-cta-attr="phone" class="button cta">Call 855-566-0155 text</span>
+    <span data-cta-attr="phone" class="button cta">Call 999-123-1234 text</span>
+    <br />
+    <span data-cta-attr="phone" class="button nocta"
+      >Call 999-123-1234 no CTA class</span
+    >
   </div>
 </template>
 <script>
@@ -47,6 +52,14 @@ export default {
         overlayElements: this.ctas,
         renew: false
       });
+    },
+    overlayPhoneNumber: function () {
+      this.$analytics.plugins.zar.overlayPhoneNumber(
+        {
+          overlayElements: document.querySelectorAll('.nocta[data-cta-attr="phone"]'),
+          number: "1234567890"
+        }
+      );
     },
     revertOverlay: function () {
       this.$analytics.plugins.zar.revertOverlayNumbers({ overlayElements: this.ctas });

@@ -68,6 +68,7 @@ class NumberPoolResponseMessages(metaclass=ClassValueContainsMeta):
     NO_SID = "no session ID"
     NOT_FOUND = "not found"
     MAX_RENEWAL = "maximum renewal exceeded"
+    INTERNAL_ERROR = "internal error"
 
 
 number_pool_conn = None

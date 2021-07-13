@@ -517,6 +517,9 @@ function zar({ apiUrl }) {
           debug: this.instance.getState('context').debug
         });
       },
+      overlayPhoneNumber({ overlayElements, number }) {
+        overlayPhoneNumber({ elems: overlayElements, number });
+      },
       revertOverlayNumbers({ overlayElements }) {
         revertOverlayNumbers({ elems: overlayElements });
       },

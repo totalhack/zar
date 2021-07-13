@@ -151,3 +151,49 @@ def test_endpoint_number_pool(client: TestClient) -> None:
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+
+
+SAMPLE_TRACK_CALL_REQUEST = {
+    "key": "abc",
+    "call_id": "1234",
+    "call_from": "5551235555",
+    "call_to": "5551235556",
+}
+
+
+def test_endpoint_call_track_error(client: TestClient) -> None:
+    resp = client.post(
+        f"{settings.API_V1_STR}/track_call", json=SAMPLE_TRACK_CALL_REQUEST
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    # We didn't create a number context so this should respond with an error
+    assert data.get("status", None) == NumberPoolResponseStatus.ERROR
+
+
+def test_endpoint_call_track_success(client: TestClient) -> None:
+    resp = client.get(
+        f"{settings.API_V1_STR}/reset_pool",
+        params=dict(key="abc", pool_id=1, preserve=False),
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(
+        f"{settings.API_V1_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+    number = data["number"]
+
+    track_call_req = SAMPLE_TRACK_CALL_REQUEST.copy()
+    track_call_req["call_to"] = number
+    pp(track_call_req)
+
+    resp = client.post(f"{settings.API_V1_STR}/track_call", json=track_call_req)
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS

@@ -1,13 +1,20 @@
 from typing import Generator, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import insert
 from sqlalchemy.inspection import inspect
-from tlbx import st, json, info, warn
+from tlbx import st, json, warn, error
 
 from app import models
-from app.schemas.zar import PageRequestBody, TrackRequestBody, NumberPoolRequestBody
+from app.schemas.zar import (
+    PageRequestBody,
+    TrackRequestBody,
+    TrackCallRequestBody,
+    NumberPoolRequestBody,
+)
 from app.api import deps
 from app.core.config import settings
+from app.db.session import engine
 from app.number_pool import (
     NumberPoolAPI,
     NumberPoolResponseStatus,
@@ -202,15 +209,61 @@ def number_pool(body: NumberPoolRequestBody, request: Request) -> Dict[str, Any]
     return dict(status=NumberPoolResponseStatus.SUCCESS, number=res, msg=None)
 
 
+@router.post("/track_call", response_model=Dict[str, Any])
+def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
+    body = dict(body)
+    key = body.get("key", None)
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if settings.DEBUG:
+        print_request(request.headers, body)
+
+    global pool_api
+    if not pool_api:
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.UNAVAILABLE,
+        )
+
+    ctx = pool_api.get_number_context(body["call_to"].lstrip("+1"))
+    if not ctx:
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.NOT_FOUND,
+        )
+
+    ctx_json = json.dumps(ctx)
+    insert_stmt = insert(models.TrackCall).values(
+        call_id=body["call_id"],
+        call_from=body["call_from"],
+        call_to=body["call_to"],
+        number_context=ctx_json,
+    )
+
+    try:
+        engine.execute(insert_stmt)
+    except Exception as e:
+        error("Failed to save TrackCall record:" + str(e))
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.INTERNAL_ERROR,
+        )
+
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx_json)
+
+
 @router.get("/refresh_number_pool_conn", response_model=Dict[str, Any])
 def refresh_number_pool_conn(request: Request, key: str = None) -> Dict[str, Any]:
     if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
         raise HTTPException(status_code=403, detail="Forbidden")
     global pool_api
     if not pool_api:
-        return dict(status=NumberPoolResponseStatus.UNAVAILABLE)
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.UNAVAILABLE,
+        )
     pool_api.refresh_conn()
-    return dict(status=NumberPoolResponseStatus.SUCCESS)
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=None)
 
 
 @router.get("/init_number_pools", response_model=Dict[str, Any])
@@ -219,9 +272,28 @@ def init_number_pools(request: Request, key: str = None) -> Dict[str, Any]:
         raise HTTPException(status_code=403, detail="Forbidden")
     global pool_api
     if not pool_api:
-        return dict(status=NumberPoolResponseStatus.UNAVAILABLE)
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.UNAVAILABLE,
+        )
     res = pool_api.init_pools()
     return dict(status=NumberPoolResponseStatus.SUCCESS, msg=json.dumps(res))
+
+
+@router.get("/reset_pool", response_model=Dict[str, Any])
+def reset_pool(
+    request: Request, pool_id: int, preserve: bool = True, key: str = None
+) -> Dict[str, Any]:
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    global pool_api
+    if not pool_api:
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.UNAVAILABLE,
+        )
+    pool_api._reset_pool(pool_id, preserve=preserve)
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=None)
 
 
 @router.get("/number_pool_stats", response_model=Dict[str, Any])
@@ -232,7 +304,10 @@ def number_pool_stats(
         raise HTTPException(status_code=403, detail="Forbidden")
     global pool_api
     if not pool_api:
-        return dict(status=NumberPoolResponseStatus.UNAVAILABLE)
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.UNAVAILABLE,
+        )
     return pool_api.get_all_pool_stats(with_contexts=with_contexts)
 
 
