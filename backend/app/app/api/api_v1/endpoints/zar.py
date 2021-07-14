@@ -225,7 +225,9 @@ def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
             msg=NumberPoolResponseMessages.UNAVAILABLE,
         )
 
-    ctx = pool_api.get_number_context(body["call_to"].lstrip("+1"))
+    call_to = body["call_to"].lstrip("+1")
+    call_from = body["call_from"].lstrip("+1")
+    ctx = pool_api.get_number_context(call_to)
     if not ctx:
         return dict(
             status=NumberPoolResponseStatus.ERROR,
@@ -235,8 +237,9 @@ def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
     ctx_json = json.dumps(ctx)
     insert_stmt = insert(models.TrackCall).values(
         call_id=body["call_id"],
-        call_from=body["call_from"],
-        call_to=body["call_to"],
+        sid=ctx.get("request_context", {}).get("sid", None),
+        call_from=call_from,
+        call_to=call_to,
         number_context=ctx_json,
     )
 
