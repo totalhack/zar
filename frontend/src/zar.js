@@ -222,20 +222,27 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
     // Store the original values
     numberOverlayMap.set(elems[i], elemNum);
 
-    elems[i].innerHTML = "";
     if (elemNum.href) {
       elems[i].href = "tel:" + number;
     }
 
-    if (elemNum.text) {
-      let overlay = number;
-      if (elemNum.numberText.indexOf("-") > -1) {
-        overlay = number.slice(2, 5) + "-" + number.slice(5, 8) + "-" + number.slice(8, 12);
+    if (elemNum.numberText) {
+      // If there is a phone number present in the text...
+      elems[i].innerHTML = "";
+      if (elemNum.text) {
+        let overlay = number;
+        if (elemNum.numberText.indexOf("-") > -1) {
+          overlay = number.slice(2, 5) + "-" + number.slice(5, 8) + "-" + number.slice(8, 12);
+        }
+        const numberText = elemNum.text.replace(elemNum.numberText, overlay);
+        elems[i].appendChild(document.createTextNode(numberText));
+      } else {
+        elems[i].appendChild(document.createTextNode(number));
       }
-      const numberText = elemNum.text.replace(elemNum.numberText, overlay);
-      elems[i].appendChild(document.createTextNode(numberText));
     } else {
-      elems[i].appendChild(document.createTextNode(number));
+      if (debug) {
+        console.log("pool: no number text found on", elems[i]);
+      }
     }
   }
 }

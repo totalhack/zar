@@ -15,6 +15,10 @@
       ><span>Call 999-123-1234 link</span></a
     >
     <br />
+    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"
+      >Call Now</a
+    >
+    <br />
     <span data-cta-attr="phone" class="button cta">999-123-1234</span>
     <br />
     <span data-cta-attr="phone" class="button cta">Call 999-123-1234 text</span>
