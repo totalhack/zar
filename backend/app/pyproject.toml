@@ -7,7 +7,7 @@ authors = ["Admin <admin@example.com>"]
 [tool.poetry.dependencies]
 python = "^3.8"
 uvicorn = "^0.12.2"
-fastapi = "^0.61.1"
+fastapi = "^0.65.2"
 requests = "^2.23.0"
 tenacity = "^6.1.0"
 pydantic = "^1.4"
