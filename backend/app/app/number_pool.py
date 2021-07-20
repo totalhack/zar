@@ -23,8 +23,11 @@ from app.schemas.zar import NumberPoolCacheValue
 
 
 NUMBER_POOL_CONNECT_TRIES = 5
-NUMBER_POOL_CACHE_EXPIRATION = 60 * 5  # TODO read from pool configs
-NUMBER_POOL_MAX_RENEWAL_AGE = 48 * 60 * 60  # TODO read from pool configs
+# TODO read these from pool configs
+NUMBER_POOL_CACHE_EXPIRATION = 2 * 60
+NUMBER_POOL_MAX_RENEWAL_AGE = 48 * 60 * 60
+NUMBER_POOL_ROUTE_CACHE_EXPIRATION = 7 * 24 * 60 * 60
+
 LOCK_WAIT_TIMEOUT = 5
 LOCK_HOLD_TIMEOUT = 5
 INIT_LOCK_TIMEOUT = 2
@@ -208,6 +211,19 @@ class NumberPoolAPI:
         if self._number_context_expired(res):
             return NumberStatus.EXPIRED, res
         return NumberStatus.TAKEN, res
+
+    def get_cached_route_key(self, call_from, call_to):
+        return f"{call_from}->{call_to}"
+
+    def set_cached_route_context(self, call_from, call_to, context):
+        context = NumberPoolCacheValue(**context)
+        key = self.get_cached_route_key(call_from, call_to)
+        self.conn.set(key, context.json(), ex=NUMBER_POOL_ROUTE_CACHE_EXPIRATION)
+
+    def get_cached_route_context(self, call_from, call_to):
+        key = self.get_cached_route_key(call_from, call_to)
+        res = self.conn.get(key)
+        return json.loads(res) if res else None
 
     def get_all_pool_stats(self, with_contexts=False):
         stats = {}
@@ -422,7 +438,7 @@ class NumberPoolAPI:
         # remove session -> number mappings
         sids = []
         for number in numbers:
-            ctx = self.get_number_context(pool_id, number)
+            ctx = self.get_number_context(number)
             if not ctx:
                 continue
             sids.append(self._get_session_id(pool_id, ctx["request_context"]))

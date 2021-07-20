@@ -42,6 +42,7 @@ class TrackCall(Base):
     call_from = Column(String(15), nullable=False)
     call_to = Column(String(15), nullable=False)
     number_context = Column(Text, nullable=True)
+    from_route_cache = Column(Boolean, nullable=True, default=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
 
 

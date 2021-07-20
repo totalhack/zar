@@ -197,3 +197,11 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+
+    # route context should come into play on this one
+    resp = client.post(f"{settings.API_V1_STR}/track_call", json=track_call_req)
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+

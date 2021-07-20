@@ -3,7 +3,7 @@ from typing import Generator, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import insert
 from sqlalchemy.inspection import inspect
-from tlbx import st, json, warn, error
+from tlbx import st, json, info, warn, error
 
 from app import models
 from app.schemas.zar import (
@@ -152,7 +152,7 @@ def number_pool(body: NumberPoolRequestBody, request: Request) -> Dict[str, Any]
     zar = body["properties"].get("zar", {}) or {}
     vid, sid, cid = get_zar_ids(zar)
     if not sid:
-        warn(f"No SID")
+        warn("No SID")
         return dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
@@ -169,16 +169,18 @@ def number_pool(body: NumberPoolRequestBody, request: Request) -> Dict[str, Any]
         user_agent=headers["user_agent"],
         referer=headers["referer"],
         host=headers["host"],
-        visits={vid: context},
+        visits={vid: context},  # TODO need to confirm renewal ctx merge works
     )
 
     global pool_api
     if not pool_api:
-        return dict(
+        res = dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
             msg=NumberPoolResponseMessages.UNAVAILABLE,
         )
+        warn(res)
+        return res
 
     try:
         res = pool_api.lease_number(
@@ -187,26 +189,28 @@ def number_pool(body: NumberPoolRequestBody, request: Request) -> Dict[str, Any]
             target_number=number,
             renew=True if number else False,
         )
+        res = dict(status=NumberPoolResponseStatus.SUCCESS, number=res, msg=None)
     except NumberPoolEmpty as e:
-        return dict(
+        res = dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
             msg=NumberPoolResponseMessages.EMPTY,
         )
     except NumberNotFound as e:
-        return dict(
+        res = dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
             msg=NumberPoolResponseMessages.NOT_FOUND,
         )
     except NumberMaxRenewalExceeded as e:
-        return dict(
+        res = dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
             msg=NumberPoolResponseMessages.MAX_RENEWAL,
         )
 
-    return dict(status=NumberPoolResponseStatus.SUCCESS, number=res, msg=None)
+    info(res)
+    return res
 
 
 @router.post("/track_call", response_model=Dict[str, Any])
@@ -220,19 +224,47 @@ def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
 
     global pool_api
     if not pool_api:
-        return dict(
+        res = dict(
             status=NumberPoolResponseStatus.ERROR,
             msg=NumberPoolResponseMessages.UNAVAILABLE,
         )
+        warn(res)
+        return res
 
     call_to = body["call_to"].lstrip("+1")
     call_from = body["call_from"].lstrip("+1")
-    ctx = pool_api.get_number_context(call_to)
+    number_ctx = pool_api.get_number_context(call_to)
+    route_ctx = pool_api.get_cached_route_context(call_from, call_to)
+    from_route_cache = False
+    ctx = None
+
+    if (not number_ctx) and route_ctx:
+        ctx = route_ctx
+        from_route_cache = True
+    elif number_ctx and not route_ctx:
+        ctx = number_ctx
+    elif number_ctx and route_ctx:
+        pool_id = number_ctx["pool_id"]
+        number_sid = pool_api._get_session_id(pool_id, number_ctx["request_context"])
+        route_sid = pool_api._get_session_id(pool_id, route_ctx["request_context"])
+        if number_sid == route_sid:
+            # Same session, use direct number ctx since it may be more up to date
+            ctx = number_ctx
+        else:
+            # Different session, so likely a different user has this number now. Use
+            # the cached route context.
+            ctx = route_ctx
+            from_route_cache = True
+
     if not ctx:
-        return dict(
+        res = dict(
             status=NumberPoolResponseStatus.ERROR,
             msg=NumberPoolResponseMessages.NOT_FOUND,
         )
+        warn(res)
+        return res
+
+    pool_api.set_cached_route_context(call_from, call_to, ctx)
 
     ctx_json = json.dumps(ctx)
     insert_stmt = insert(models.TrackCall).values(
@@ -241,6 +273,7 @@ def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
         call_from=call_from,
         call_to=call_to,
         number_context=ctx_json,
+        from_route_cache=from_route_cache,
     )
 
     try:
