@@ -42,9 +42,17 @@ def test_pool_lease_invalid_number():
 def test_pool_take_expired_number():
     pool_api._reset_pool(DEFAULT_POOL_ID, preserve=False)
     num = pool_api.lease_number(DEFAULT_POOL_ID, {})
-    pool_api._set_number_renewed_at(num, time.time() - 1e6)  # Should be expired...
-    new_num = pool_api.lease_number(DEFAULT_POOL_ID, dict(foo="bar"), target_number=num)
-    assert num == new_num  # Should take the expired number
+    pool_api._set_number_renewed_at(num, time.time() - 2e6)  # Should be expired...
+
+    num2 = pool_api.lease_number(DEFAULT_POOL_ID, {})
+    pool_api._set_number_renewed_at(num2, time.time() - 1e6)  # Should be expired...
+
+    # Take remaining 2 numbers to none are free: assumes there are still 4 in test pool!
+    num3 = pool_api.lease_number(DEFAULT_POOL_ID, {})
+    num4 = pool_api.lease_number(DEFAULT_POOL_ID, {})
+
+    new_num = pool_api.lease_number(DEFAULT_POOL_ID, dict(foo="bar"))
+    assert num == new_num  # Should take the oldest expired number
     ctx = pool_api.get_number_context(num)
     assert "foo" in ctx.get("request_context", None)
 

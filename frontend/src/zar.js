@@ -16,11 +16,14 @@ const POOL_DEFAULT_URL_FLAG = 'pl';
 const DAY_TTL = 1000 * 60 * 60 * 24; // In milliseconds
 const CID_TTL = DAY_TTL * 365 * 3; // N years, ~like GA
 const SID_TTL = DAY_TTL * 2; // N days, ~like GA
+// Pool session data is in localStorage but we don't want the pool flag to
+// stay set forever, even though the backend controls max renewal time.
+const POOL_STORAGE_TTL = DAY_TTL * 7;
 
 // Tracks original phone numbers that have been replaced so
 // we can revert if necessary.
 // eslint-disable-next-line
-let numberOverlayMap = new Map();
+var numberOverlayMap = new Map();
 
 function generateClientId() {
   return uuid();
@@ -51,16 +54,6 @@ function expireByTTL(idObj, ttl, debug) {
   if (diff >= ttl) {
     if (debug) {
       console.log('Expired after ', diff / 1000.0, 'seconds');
-    }
-    return true;
-  }
-  return false;
-}
-
-function expireByReferrer(idObj, newVisit, debug) {
-  if (document.referrer.indexOf(window.location.hostname) == -1) {
-    if (debug) {
-      console.log('Host not in referrer: ', window.location.hostname, '//', document.referrer);
     }
     return true;
   }
@@ -116,7 +109,7 @@ function initIds({
   // an expiration in a new visit.
 
   var sidResult;
-  const sidObj = getSIDObj(); // Checks sessionStorage
+  var sidObj = getSIDObj(); // Checks sessionStorage
   var sessionSid = sidObj && sidObj.id ? sidObj.id : null;
   if (vidResult.isNew && sessionSid) {
     console.warn('Found old sessionStorage SID with new VID');
@@ -142,6 +135,10 @@ function initIds({
   // Set/reset sessionStorage SID either way
   setSessionStorage(SID_KEY, { id: sessionSid, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew, visits: sidResult.visits });
 
+  // We store values globally in case the storage is reset mid-session
+  window[CID_KEY] = cidResult;
+  window[SID_KEY] = sidResult;
+  window[VID_KEY] = vidResult;
   return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id };
 }
 
@@ -193,8 +190,9 @@ function extractPhoneNumber({ elem }) {
 
 function overlayPhoneNumber({ elems, number, debug = false }) {
   var origNum;
+  var overlayNum = number;
   if (!number.startsWith("+1")) {
-    number = "+1" + number; // NOTE: expects 10-digit US numbers
+    overlayNum = "+1" + number; // NOTE: expects 10-digit US numbers
   }
 
   for (var i = 0; i < elems.length; i++) {
@@ -209,35 +207,33 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
 
     if (!origNum) {
       origNum = elemNum;
-    } else if (origNum.number !== elemNum.number) {
-      console.warn('pool: overlaying multiple phone numbers with a single number!');
-      console.log(origNum);
-      console.log(elemNum);
+    } else if ((elemNum.number && origNum.number) && (origNum.number !== elemNum.number)) {
+      console.warn('pool: overlaying multiple phone numbers with a single number!', origNum.number, elemNum.number);
     }
 
     if (debug) {
-      console.log("pool: overlaying number", number, "on", elems[i]);
+      console.log("pool: overlaying number", overlayNum, "on", elems[i]);
     }
 
     // Store the original values
     numberOverlayMap.set(elems[i], elemNum);
 
     if (elemNum.href) {
-      elems[i].href = "tel:" + number;
+      elems[i].href = "tel:" + overlayNum;
     }
 
     if (elemNum.numberText) {
       // If there is a phone number present in the text...
       elems[i].innerHTML = "";
       if (elemNum.text) {
-        let overlay = number;
+        var overlay = overlayNum;
         if (elemNum.numberText.indexOf("-") > -1) {
-          overlay = number.slice(2, 5) + "-" + number.slice(5, 8) + "-" + number.slice(8, 12);
+          overlay = overlayNum.slice(2, 5) + "-" + overlayNum.slice(5, 8) + "-" + overlayNum.slice(8, 12);
         }
         const numberText = elemNum.text.replace(elemNum.numberText, overlay);
         elems[i].appendChild(document.createTextNode(numberText));
       } else {
-        elems[i].appendChild(document.createTextNode(number));
+        elems[i].appendChild(document.createTextNode(overlayNum));
       }
     } else {
       if (debug) {
@@ -252,7 +248,9 @@ function revertOverlayNumbers({ elems, debug = false }) {
     if (numberOverlayMap.has(elems[i])) {
       const currentHTML = elems[i].innerHTML;
       const origElemData = numberOverlayMap.get(elems[i]);
-      console.log("orig:", origElemData);
+      if (debug) {
+        console.log("orig:", origElemData);
+      }
       const origHTML = origElemData.html;
       if (debug) {
         console.log("pool: reverting", currentHTML, "to", origHTML);
@@ -270,6 +268,50 @@ function revertOverlayNumbers({ elems, debug = false }) {
   }
 }
 
+function removePoolSession({ overlayElements }) {
+  removeItem(NUMBER_POOL_KEY);
+  if (window[NUMBER_POOL_KEY]) {
+    delete window[NUMBER_POOL_KEY];
+  }
+  revertOverlayNumbers({ elems: overlayElements });
+}
+
+function clearPoolIntervals(poolData) {
+  if (!poolData || !poolData.poolNumbers) {
+    return;
+  }
+  for (var poolId in poolData.poolNumbers) {
+    clearInterval(poolData.poolNumbers[poolId].interval);
+  }
+}
+
+function poolSessionExpired(obj) {
+  if (obj && obj.t && (obj.t + POOL_STORAGE_TTL < Date.now())) {
+    return true;
+  }
+  return false;
+}
+
+function getPoolSession({ overlayElements }) {
+  const data = getItem(NUMBER_POOL_KEY);
+  if ((!data) && window[NUMBER_POOL_KEY]) {
+    if (poolSessionExpired(window[NUMBER_POOL_KEY])) {
+      clearPoolIntervals(window[NUMBER_POOL_KEY]);
+      removePoolSession({ overlayElements });
+      return null;
+    }
+    console.warn("got number pool session from global var");
+    setItem(NUMBER_POOL_KEY, window[NUMBER_POOL_KEY]);
+    return window[NUMBER_POOL_KEY];
+  }
+  if (poolSessionExpired(data)) {
+    clearPoolIntervals(data);
+    removePoolSession({ overlayElements });
+    return null;
+  }
+  return data;
+}
+
 async function initTrackingPool({
   poolId,
   overlayElements,
@@ -279,8 +321,8 @@ async function initTrackingPool({
   renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS,
   debug = false
 } = {}) {
-  let poolEnabled = false;
-  let seshData = getSessionStorage(NUMBER_POOL_KEY);
+  var poolEnabled = false;
+  var seshData = getPoolSession({ overlayElements });
 
   if (seshData && seshData.poolEnabled) {
     poolEnabled = true;
@@ -298,8 +340,8 @@ async function initTrackingPool({
     return null;
   }
 
-  let seshNumber = null;
-  let seshInterval = null;
+  var seshNumber = null;
+  var seshInterval = null;
 
   if (seshData && seshData.poolNumbers && seshData.poolNumbers[poolId]) {
     const poolResult = seshData.poolNumbers[poolId];
@@ -319,7 +361,7 @@ async function initTrackingPool({
     }
   }
 
-  let resp = {};
+  var resp = {};
   try {
     resp = await getPoolNumber({ poolId, apiUrl, number: seshNumber, context: {} });
   } catch (e) {
@@ -328,7 +370,11 @@ async function initTrackingPool({
     // call with an error, this would allow the retries to just start working again
     // once the service is back up. If it is the first call and the interval has never
     // been set, the service wouldn't retry unless initTrackingPool was called again.
-    console.warn("pool: error getting number:", e);
+    const msg = "pool: error getting number: " + JSON.stringify(e);
+    if (window.rollbar) {
+      window.rollbar.warning(msg);
+    }
+    console.warn(msg);
     return { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
   }
 
@@ -367,27 +413,47 @@ async function initTrackingPool({
     poolNumbers[poolId] = resp;
     seshData = {
       poolEnabled: true,
-      poolNumbers
+      poolNumbers,
+      t: Date.now()
     };
   }
 
-  setSessionStorage(NUMBER_POOL_KEY, seshData);
+  window[NUMBER_POOL_KEY] = seshData;
+  setItem(NUMBER_POOL_KEY, seshData);
   if (debug) {
     console.log('pool: saved session data ' + JSON.stringify(seshData));
   }
   return resp;
 }
 
-function getCIDObj({ getter = getItem } = {}) {
-  return getter(CID_KEY);
+function getCIDObj({ getter = getItem, setter = setItem } = {}) {
+  const obj = getter(CID_KEY);
+  if ((!obj) && window[CID_KEY]) {
+    console.warn("got CID from global var");
+    setter(CID_KEY, window[CID_KEY]);
+    return window[CID_KEY];
+  }
+  return obj;
 }
 
-function getSIDObj({ getter = getSessionStorage } = {}) {
-  return getter(SID_KEY);
+function getSIDObj({ getter = getSessionStorage, setter = setSessionStorage } = {}) {
+  const obj = getter(SID_KEY);
+  if ((!obj) && window[SID_KEY]) {
+    console.warn("got SID from global var");
+    setter(SID_KEY, window[SID_KEY]);
+    return window[SID_KEY];
+  }
+  return obj;
 }
 
-function getVIDObj({ getter = getSessionStorage } = {}) {
-  return getter(VID_KEY);
+function getVIDObj({ getter = getSessionStorage, setter = setSessionStorage } = {}) {
+  const obj = getter(VID_KEY);
+  if ((!obj) && window[VID_KEY]) {
+    console.warn("got VID from global var");
+    setter(VID_KEY, window[VID_KEY]);
+    return window[VID_KEY];
+  }
+  return obj;
 }
 
 function getCID({ getter = getItem } = {}) {
@@ -423,15 +489,24 @@ function getIds() {
 
 function removeCID() {
   removeItem(CID_KEY);
+  if (window[CID_KEY]) {
+    delete window[CID_KEY];
+  }
 }
 
 function removeSID() {
   removeSessionStorage(SID_KEY);
   removeItem(SID_KEY);
+  if (window[SID_KEY]) {
+    delete window[SID_KEY];
+  }
 }
 
 function removeVID() {
   removeSessionStorage(VID_KEY);
+  if (window[VID_KEY]) {
+    delete window[VID_KEY];
+  }
 }
 
 function removeIds() {
@@ -531,8 +606,7 @@ function zar({ apiUrl }) {
         revertOverlayNumbers({ elems: overlayElements });
       },
       removePoolSession({ overlayElements }) {
-        removeSessionStorage(NUMBER_POOL_KEY);
-        revertOverlayNumbers({ elems: overlayElements });
+        removePoolSession({ overlayElements });
       },
       getPoolStats({ key = null, with_contexts = false }) {
         return getPoolStats({ apiUrl: this.instance.plugins.zar.apiUrl(), key, with_contexts });

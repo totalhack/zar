@@ -70,8 +70,8 @@ export default function paramsParse(url) {
 
 
 function getParamsAsObject(query) {
-  let params = {};
-  let temp;
+  var params = {};
+  var temp;
   const re = /([^&=]+)=?([^&]*)/g;
 
   // eslint-disable-next-line
@@ -108,9 +108,9 @@ function assign(obj, keyPath, value) {
   obj[keyPath[lastKeyIndex]] = value;
 }
 
-function makeRequest({ method, url, data = null, json = true }) {
+function makeRequest({ method, url, data, json = true }) {
   return new Promise(function (resolve, reject) {
-    let xhr = new XMLHttpRequest();
+    var xhr = new XMLHttpRequest();
     xhr.open(method, url);
 
     if (json) {
@@ -156,17 +156,19 @@ function formatParams(params) {
 }
 
 async function httpGet({ url, params = null, json = true }) {
+  var finalUrl = url;
   if (params) {
-    url = url + formatParams(params);
+    finalUrl = finalUrl + formatParams(params);
   }
-  return await makeRequest({ method: "GET", url, json });
+  return await makeRequest({ method: "GET", url: finalUrl, json });
 }
 
 async function httpPost({ url, data, json = true }) {
+  var finalData = data;
   if (json) {
-    data = JSON.stringify(data);
+    finalData = JSON.stringify(finalData);
   }
-  return await makeRequest({ method: "POST", url, data, json });
+  return await makeRequest({ method: "POST", url, data: finalData, json });
 }
 
 export { uuid, hasAdBlock, paramsParse, httpGet, httpPost };

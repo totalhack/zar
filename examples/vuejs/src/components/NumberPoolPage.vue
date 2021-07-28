@@ -82,7 +82,9 @@ export default {
       renewalInterval: 10 * 1000
     });
     console.log(resp);
-    this.poolInterval = resp.interval;
+    if (resp) {
+      this.poolInterval = resp.interval;
+    }
   },
   beforeDestroy() {
     this.revertOverlay();
