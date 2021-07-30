@@ -75,18 +75,20 @@ export default {
   mounted: async function () {
     this.ctas = this.getCTAs();
     console.log("Initiliazing pool:", this.$props.poolId);
+    const self = this;
     const resp = await this.$analytics.plugins.zar.initTrackingPool({
       poolId: this.$props.poolId,
       overlayElements: this.ctas,
       renew: true,
-      renewalInterval: 10 * 1000
+      renewalInterval: 10 * 1000,
+      callback: function (result) {
+        self.$analytics.track('number_impressions', { numbers: self.$analytics.plugins.zar.extractPhoneNumbers({ elems: self.ctas }) });
+      }
     });
     console.log(resp);
     if (resp) {
       this.poolInterval = resp.interval;
     }
-    this.ctas = this.getCTAs();
-    this.$analytics.track('number_impressions', { numbers: this.$analytics.plugins.zar.extractPhoneNumbers({ elems: this.ctas }) });
   },
   beforeDestroy() {
     this.revertOverlay();

@@ -319,6 +319,7 @@ async function initTrackingPool({
   urlParam = POOL_DEFAULT_URL_FLAG,
   renew = true,
   renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS,
+  callback = null,
   debug = false
 } = {}) {
   var poolEnabled = false;
@@ -351,6 +352,9 @@ async function initTrackingPool({
       if (debug) {
         console.log('pool: returning cached unsuccessful pool result: ' + JSON.stringify(poolResult));
       }
+      if (callback) {
+        callback(poolResult);
+      }
       return poolResult;
     }
     if (poolResult.number) {
@@ -375,7 +379,11 @@ async function initTrackingPool({
       window.rollbar.warning(msg);
     }
     console.warn(msg);
-    return { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
+    const errorRes = { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
+    if (callback) {
+      callback(errorRes);
+    }
+    return errorRes;
   }
 
   if (resp.status === NUMBER_POOL_SUCCESS && resp.number) {
@@ -422,6 +430,9 @@ async function initTrackingPool({
   setItem(NUMBER_POOL_KEY, seshData);
   if (debug) {
     console.log('pool: saved session data ' + JSON.stringify(seshData));
+  }
+  if (callback) {
+    callback(resp);
   }
   return resp;
 }
@@ -588,7 +599,7 @@ function zar({ apiUrl }) {
       hasAdBlock() {
         return hasAdBlock();
       },
-      initTrackingPool({ poolId, overlayElements, urlParam = POOL_DEFAULT_URL_FLAG, renew = true, renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS }) {
+      initTrackingPool({ poolId, overlayElements, urlParam = POOL_DEFAULT_URL_FLAG, renew = true, renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS, callback = null }) {
         return initTrackingPool({
           poolId,
           overlayElements,
@@ -596,6 +607,7 @@ function zar({ apiUrl }) {
           urlParam,
           renew,
           renewalInterval,
+          callback,
           debug: this.instance.getState('context').debug
         });
       },
