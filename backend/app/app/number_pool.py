@@ -247,6 +247,7 @@ class NumberPoolAPI:
         start = time.time()
         number = None
         from_sid = False
+        request_sid = self._get_session_id(pool_id, request_context)
 
         try:
             with self._get_pool_lock(pool_id):
@@ -258,7 +259,7 @@ class NumberPoolAPI:
                     if target_number and sid_number != target_number:
                         # TODO should this be an error instead?
                         warn(
-                            f"Session / Target number mismatch: {sid_number} / {target_number}"
+                            f"{request_sid}: Session / Target number mismatch: {sid_number} / {target_number}"
                         )
                     from_sid = True
                     renew = True
@@ -267,14 +268,19 @@ class NumberPoolAPI:
                 if target_number:
                     status, ctx = self.get_number_status(target_number)
                     if status == NumberStatus.FREE:
+                        info(f"{request_sid}: target number {target_number} free")
                         number = self._lease_free_number(
                             pool_id, target_number, request_context
                         )
                     elif status == NumberStatus.EXPIRED:
+                        info(f"{request_sid}: target number {target_number} expired")
                         number = self._lease_expired_number(
                             pool_id, target_number, request_context
                         )
                     elif status == NumberStatus.TAKEN and renew:
+                        info(
+                            f"{request_sid}: target number {target_number} taken, renewal requested"
+                        )
                         if request_context:
                             ctx["request_context"].update(request_context)
                         try:
@@ -292,7 +298,7 @@ class NumberPoolAPI:
         except LockError as e:
             raise NumberPoolUnavailable(f"Could not acquire pool {pool_id} lock")
 
-        info(f"took {time.time() - start:0.3f}s")
+        info(f"{request_sid}: took {time.time() - start:0.3f}s, number: {number}")
         if not number:
             msg = "No numbers available"
             if from_sid:

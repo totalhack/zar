@@ -599,6 +599,14 @@ function zar({ apiUrl }) {
           debug: this.instance.getState('context').debug
         });
       },
+      extractPhoneNumbers({ elems }) {
+        var res = [];
+        for (var i = 0; i < elems.length; i++) {
+          const elemRes = extractPhoneNumber({ elem: elems[i] });
+          res.push(elemRes);
+        }
+        return res;
+      },
       overlayPhoneNumber({ overlayElements, number }) {
         overlayPhoneNumber({ elems: overlayElements, number });
       },

@@ -261,7 +261,7 @@ def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
             status=NumberPoolResponseStatus.ERROR,
             msg=NumberPoolResponseMessages.NOT_FOUND,
         )
-        warn(res)
+        warn(f"{call_from} -> {call_to}: {res}")
         return res
 
     pool_api.set_cached_route_context(call_from, call_to, ctx)

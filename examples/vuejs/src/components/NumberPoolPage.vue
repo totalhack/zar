@@ -85,6 +85,8 @@ export default {
     if (resp) {
       this.poolInterval = resp.interval;
     }
+    this.ctas = this.getCTAs();
+    this.$analytics.track('number_impressions', { numbers: this.$analytics.plugins.zar.extractPhoneNumbers({ elems: this.ctas }) });
   },
   beforeDestroy() {
     this.revertOverlay();
