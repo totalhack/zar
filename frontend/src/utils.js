@@ -14,7 +14,7 @@ function uuid() {
     lut[d3 & 0xff] + lut[d3 >> 8 & 0xff] + lut[d3 >> 16 & 0xff] + lut[d3 >> 24 & 0xff];
 }
 
-const inBrowser = typeof document !== 'undefined';
+var inBrowser = typeof document !== 'undefined';
 
 function decode(s) {
   try {
@@ -27,7 +27,7 @@ function decode(s) {
 function hasAdBlock() {
   if (!inBrowser) return false;
   // Create fake ad
-  const fakeAd = document.createElement('div');
+  var fakeAd = document.createElement('div');
   fakeAd.innerHTML = '&nbsp;';
   fakeAd.className = 'pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
   fakeAd.style = 'width: 1px !important; height: 1px !important; position: absolute !important; left: -10000px !important; top: -1000px !important;';
@@ -42,7 +42,7 @@ function hasAdBlock() {
       return true;
     }
     if (typeof getComputedStyle !== 'undefined') {
-      const css = window.getComputedStyle(fakeAd, null);
+      var css = window.getComputedStyle(fakeAd, null);
       if (css && (css.getPropertyValue('display') === 'none' || css.getPropertyValue('visibility') === 'hidden')) {
         return true;
       }
@@ -58,7 +58,7 @@ function hasAdBlock() {
 
 function getSearchString(url) {
   if (url) {
-    const p = url.match(/\?(.*)/);
+    var p = url.match(/\?(.*)/);
     return (p && p[1]) ? p[1].split('#')[0] : '';
   }
   return inBrowser && window.location.search.substring(1);
@@ -72,7 +72,7 @@ export default function paramsParse(url) {
 function getParamsAsObject(query) {
   var params = {};
   var temp;
-  const re = /([^&=]+)=?([^&]*)/g;
+  var re = /([^&=]+)=?([^&]*)/g;
 
   // eslint-disable-next-line
   while (temp = re.exec(query)) {
@@ -89,7 +89,7 @@ function getParamsAsObject(query) {
   for (var prop in params) {
     var arr = prop.split('[');
     if (arr.length > 1) {
-      assign(params, arr.map((x) => x.replace(/[?[\]\\ ]/g, '')), params[prop]);
+      assign(params, arr.map(function (x) { return x.replace(/[?[\]\\ ]/g, ''); }), params[prop]);
       delete params[prop];
     }
   }

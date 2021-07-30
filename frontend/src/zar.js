@@ -5,20 +5,20 @@ import googleTagManager from '@analytics/google-tag-manager';
 
 import { uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
 
-const CID_KEY = '__zar_cid';
-const SID_KEY = '__zar_sid';
-const VID_KEY = '__zar_vid';
-const NUMBER_POOL_KEY = '__zar_pool';
-const NUMBER_POOL_SUCCESS = 'success';
-const NUMBER_POOL_ERROR = 'error';
-const NUMBER_POOL_RENEWAL_TIME_MS = 30 * 1000;
-const POOL_DEFAULT_URL_FLAG = 'pl';
-const DAY_TTL = 1000 * 60 * 60 * 24; // In milliseconds
-const CID_TTL = DAY_TTL * 365 * 3; // N years, ~like GA
-const SID_TTL = DAY_TTL * 2; // N days, ~like GA
+var CID_KEY = '__zar_cid';
+var SID_KEY = '__zar_sid';
+var VID_KEY = '__zar_vid';
+var NUMBER_POOL_KEY = '__zar_pool';
+var NUMBER_POOL_SUCCESS = 'success';
+var NUMBER_POOL_ERROR = 'error';
+var NUMBER_POOL_RENEWAL_TIME_MS = 30 * 1000;
+var POOL_DEFAULT_URL_FLAG = 'pl';
+var DAY_TTL = 1000 * 60 * 60 * 24; // In milliseconds
+var CID_TTL = DAY_TTL * 365 * 3; // N years, ~like GA
+var SID_TTL = DAY_TTL * 2; // N days, ~like GA
 // Pool session data is in localStorage but we don't want the pool flag to
 // stay set forever, even though the backend controls max renewal time.
-const POOL_STORAGE_TTL = DAY_TTL * 7;
+var POOL_STORAGE_TTL = DAY_TTL * 7;
 
 // Tracks original phone numbers that have been replaced so
 // we can revert if necessary.
@@ -50,7 +50,7 @@ function removeSessionStorage(key) {
 }
 
 function expireByTTL(idObj, ttl, debug) {
-  const diff = Date.now() - idObj.t;
+  var diff = Date.now() - idObj.t;
   if (diff >= ttl) {
     if (debug) {
       console.log('Expired after ', diff / 1000.0, 'seconds');
@@ -72,7 +72,7 @@ function initId(key, expirationCallback, generator, getter, setter, newVisit, de
   var isNew = false;
   var visits;
   var origReferrer = null;
-  const idObj = getter(key);
+  var idObj = getter(key);
 
   if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj, newVisit, debug))) {
     id = generator();
@@ -88,19 +88,19 @@ function initId(key, expirationCallback, generator, getter, setter, newVisit, de
     visits = (idObj.visits || 1) + (newVisit ? 1 : 0);
   }
 
-  const result = { id, t: Date.now(), origReferrer, isNew, visits };
+  var result = { id, t: Date.now(), origReferrer, isNew, visits };
   setter(key, result);
   return result;
 }
 
 function initIds({
-  clientIdExpired = (idObj, debug) => { return expireByTTL(idObj, CID_TTL, debug); },
+  clientIdExpired = function (idObj, debug) { return expireByTTL(idObj, CID_TTL, debug); },
   sessionIdExpired = expireSessionId,
   visitIdExpired = null,
   debug = false
 } = {}) {
-  const vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, getSessionStorage, setSessionStorage, null, debug);
-  const cidResult = initId(CID_KEY, clientIdExpired, generateClientId, getItem, setItem, vidResult.isNew, debug);
+  var vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, getSessionStorage, setSessionStorage, null, debug);
+  var cidResult = initId(CID_KEY, clientIdExpired, generateClientId, getItem, setItem, vidResult.isNew, debug);
 
   // SID logic is a bit more complicated, as we rely on both sessionStorage
   // and analytics' storage (usually localStorage) to track the session.
@@ -126,7 +126,7 @@ function initIds({
     sidResult = sidObj;
     sidResult.visits = sidResult.visits + (vidResult.isNew ? 1 : 0);
     sidResult.isNew = false;
-    const analyticsSIDObj = getSIDObj({ getter: getItem });
+    var analyticsSIDObj = getSIDObj({ getter: getItem });
     if (!analyticsSIDObj || !analyticsSIDObj.id) {
       console.warn('SID missing in analytics storage, setting from sessionStorage value');
       setItem(SID_KEY, { id: sidResult.id, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew, visits: sidResult.visits });
@@ -143,11 +143,11 @@ function initIds({
 }
 
 function getDefaultApiUrl() {
-  return window.location.origin + '/api/v1';
+  return window.location.host + '/api/v1';
 }
 
 async function getPoolNumber({ poolId, apiUrl, number = null, context = null }) {
-  const payload = {
+  var payload = {
     pool_id: poolId,
     number: number,
     context: context,
@@ -155,16 +155,16 @@ async function getPoolNumber({ poolId, apiUrl, number = null, context = null }) 
       zar: getStorage()
     }
   };
-  const resp = await httpPost({ url: `${apiUrl}/number_pool`, data: payload });
+  var resp = await httpPost({ url: `${apiUrl}/number_pool`, data: payload });
   return resp;
 }
 
 async function getPoolStats({ apiUrl, key = null, with_contexts = false }) {
-  const params = {
+  var params = {
     key,
     with_contexts
   };
-  const resp = await httpGet({ url: `${apiUrl}/number_pool_stats`, params: params });
+  var resp = await httpGet({ url: `${apiUrl}/number_pool_stats`, params: params });
   return resp;
 }
 
@@ -173,14 +173,14 @@ function extractPhoneNumber({ elem }) {
   var numberText = null;
   var number = null;
   var href = null;
-  const regex = new RegExp("\\+?\\(?\\d*\\)? ?\\(?\\d+\\)?\\d*([\\s./-]?\\d{2,})+", "g");
+  var regex = new RegExp("\\+?\\(?\\d*\\)? ?\\(?\\d+\\)?\\d*([\\s./-]?\\d{2,})+", "g");
 
   if (elem.href && elem.href.startsWith("tel:")) {
     href = elem.href;
   }
-  const text = elem.innerText;
-  const html = elem.innerHTML;
-  const match = regex.exec(text);
+  var text = elem.innerText;
+  var html = elem.innerHTML;
+  var match = regex.exec(text);
   if (match) {
     numberText = match[0].trim();
     number = numberText.replace("+", "").replace(/-/g, "").replace(/ /g, "").replace("(", "").replace(")", "").replace(/^1/, '');
@@ -203,7 +203,7 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
       continue;
     }
 
-    const elemNum = extractPhoneNumber({ elem: elems[i] });
+    var elemNum = extractPhoneNumber({ elem: elems[i] });
 
     if (!origNum) {
       origNum = elemNum;
@@ -230,7 +230,7 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
         if (elemNum.numberText.indexOf("-") > -1) {
           overlay = overlayNum.slice(2, 5) + "-" + overlayNum.slice(5, 8) + "-" + overlayNum.slice(8, 12);
         }
-        const numberText = elemNum.text.replace(elemNum.numberText, overlay);
+        var numberText = elemNum.text.replace(elemNum.numberText, overlay);
         elems[i].appendChild(document.createTextNode(numberText));
       } else {
         elems[i].appendChild(document.createTextNode(overlayNum));
@@ -246,12 +246,12 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
 function revertOverlayNumbers({ elems, debug = false }) {
   for (var i = 0; i < elems.length; i++) {
     if (numberOverlayMap.has(elems[i])) {
-      const currentHTML = elems[i].innerHTML;
-      const origElemData = numberOverlayMap.get(elems[i]);
+      var currentHTML = elems[i].innerHTML;
+      var origElemData = numberOverlayMap.get(elems[i]);
       if (debug) {
         console.log("orig:", origElemData);
       }
-      const origHTML = origElemData.html;
+      var origHTML = origElemData.html;
       if (debug) {
         console.log("pool: reverting", currentHTML, "to", origHTML);
       }
@@ -293,7 +293,7 @@ function poolSessionExpired(obj) {
 }
 
 function getPoolSession({ overlayElements }) {
-  const data = getItem(NUMBER_POOL_KEY);
+  var data = getItem(NUMBER_POOL_KEY);
   if ((!data) && window[NUMBER_POOL_KEY]) {
     if (poolSessionExpired(window[NUMBER_POOL_KEY])) {
       clearPoolIntervals(window[NUMBER_POOL_KEY]);
@@ -328,7 +328,7 @@ async function initTrackingPool({
   if (seshData && seshData.poolEnabled) {
     poolEnabled = true;
   } else {
-    const params = paramsParse(window.location.search);
+    var params = paramsParse(window.location.search);
     if (urlParam in params && params[urlParam] === "1") {
       poolEnabled = true;
     }
@@ -348,7 +348,7 @@ async function initTrackingPool({
   var seshInterval = null;
 
   if (seshData && seshData.poolNumbers && seshData.poolNumbers[poolId]) {
-    const poolResult = seshData.poolNumbers[poolId];
+    var poolResult = seshData.poolNumbers[poolId];
     seshInterval = poolResult.interval;
     if (poolResult.status !== NUMBER_POOL_SUCCESS) {
       // Prevents previously failed sessions from trying again
@@ -377,12 +377,12 @@ async function initTrackingPool({
     // call with an error, this would allow the retries to just start working again
     // once the service is back up. If it is the first call and the interval has never
     // been set, the service wouldn't retry unless initTrackingPool was called again.
-    const msg = "pool: error getting number: " + JSON.stringify(e);
+    var msg = "pool: error getting number: " + JSON.stringify(e);
     if (window.rollbar) {
       window.rollbar.warning(msg);
     }
     console.warn(msg);
-    const errorRes = { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
+    var errorRes = { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
     if (callback) {
       callback(errorRes);
     }
@@ -420,7 +420,7 @@ async function initTrackingPool({
       seshData.poolNumbers[poolId] = resp;
     }
   } else {
-    const poolNumbers = {};
+    var poolNumbers = {};
     poolNumbers[poolId] = resp;
     seshData = {
       poolEnabled: true,
@@ -441,7 +441,7 @@ async function initTrackingPool({
 }
 
 function getCIDObj({ getter = getItem, setter = setItem } = {}) {
-  const obj = getter(CID_KEY);
+  var obj = getter(CID_KEY);
   if ((!obj) && window[CID_KEY]) {
     console.warn("got CID from global var");
     setter(CID_KEY, window[CID_KEY]);
@@ -451,7 +451,7 @@ function getCIDObj({ getter = getItem, setter = setItem } = {}) {
 }
 
 function getSIDObj({ getter = getSessionStorage, setter = setSessionStorage } = {}) {
-  const obj = getter(SID_KEY);
+  var obj = getter(SID_KEY);
   if ((!obj) && window[SID_KEY]) {
     console.warn("got SID from global var");
     setter(SID_KEY, window[SID_KEY]);
@@ -461,7 +461,7 @@ function getSIDObj({ getter = getSessionStorage, setter = setSessionStorage } = 
 }
 
 function getVIDObj({ getter = getSessionStorage, setter = setSessionStorage } = {}) {
-  const obj = getter(VID_KEY);
+  var obj = getter(VID_KEY);
   if ((!obj) && window[VID_KEY]) {
     console.warn("got VID from global var");
     setter(VID_KEY, window[VID_KEY]);
@@ -471,17 +471,17 @@ function getVIDObj({ getter = getSessionStorage, setter = setSessionStorage } = 
 }
 
 function getCID({ getter = getItem } = {}) {
-  const obj = getCIDObj({ getter });
+  var obj = getCIDObj({ getter });
   return obj ? obj.id : null;
 }
 
 function getSID({ getter = getSessionStorage } = {}) {
-  const obj = getSIDObj({ getter });
+  var obj = getSIDObj({ getter });
   return obj ? obj.id : null;
 }
 
 function getVID({ getter = getSessionStorage } = {}) {
-  const obj = getVIDObj({ getter });
+  var obj = getVIDObj({ getter });
   return obj ? obj.id : null;
 }
 
@@ -535,9 +535,9 @@ function zar({ apiUrl }) {
     config: {
       apiUrl: apiUrl,
     },
-    initialize: ({ config }) => { },
-    loaded: () => { return true; },
-    pageStart: ({ payload, config, instance }) => {
+    initialize: function ({ config }) { },
+    loaded: function () { return true; },
+    pageStart: function ({ payload, config, instance }) {
       payload.properties.zar = getStorage();
       // Remove redundant values since url has all of this
       if ("hash" in payload.properties) {
@@ -551,28 +551,28 @@ function zar({ apiUrl }) {
       }
       return payload;
     },
-    trackStart: ({ payload, config, instance }) => {
+    trackStart: function ({ payload, config, instance }) {
       payload.properties.zar = getStorage();
       return payload;
     },
-    page: ({ payload, options, instance, config }) => {
+    page: function ({ payload, options, instance, config }) {
       if (instance.getState('context').debug) {
         console.log('page', payload, options, config);
       }
       httpPost({ url: `${config.apiUrl}/page`, data: payload });
     },
-    track: ({ payload, options, instance, config }) => {
+    track: function ({ payload, options, instance, config }) {
       if (instance.getState('context').debug) {
         console.log('track', payload);
       }
       httpPost({ url: `${config.apiUrl}/track`, data: payload });
     },
-    reset: ({ instance }) => {
+    reset: function ({ instance }) {
       removeIds();
     },
-    bootstrap: ({ payload, config, instance }) => {
+    bootstrap: function ({ payload, config, instance }) {
       // TODO: ability to override initIds params with zar() args
-      const result = initIds({ debug: instance.getState('context').debug });
+      var result = initIds({ debug: instance.getState('context').debug });
       instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
     },
     methods: {
@@ -580,7 +580,7 @@ function zar({ apiUrl }) {
         return apiUrl;
       },
       initIds() {
-        const result = initIds({ debug: this.instance.getState('context').debug });
+        var result = initIds({ debug: this.instance.getState('context').debug });
         this.instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
         return result;
       },
@@ -617,7 +617,7 @@ function zar({ apiUrl }) {
       extractPhoneNumbers({ elems }) {
         var res = [];
         for (var i = 0; i < elems.length; i++) {
-          const elemRes = extractPhoneNumber({ elem: elems[i] });
+          var elemRes = extractPhoneNumber({ elem: elems[i] });
           res.push(elemRes);
         }
         return res;
