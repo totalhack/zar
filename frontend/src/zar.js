@@ -338,6 +338,9 @@ async function initTrackingPool({
     if (debug) {
       console.log('pool: not enabled');
     }
+    if (callback) {
+      callback(null);
+    }
     return null;
   }
 
