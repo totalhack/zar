@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Zillion Analytics Recorder",
   "main": "dist/zar.bundle.js",
   "publishConfig": {

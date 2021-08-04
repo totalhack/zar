@@ -291,7 +291,7 @@ class NumberPoolAPI:
                                 number = target_number
                         except NumberSessionKeyMismatch as e:
                             # Let it go on to leasing a random number instead
-                            warn(str(e))
+                            pass
 
                 if (not number) and (not from_sid):
                     number = self._lease_random_number(pool_id, request_context)
@@ -477,9 +477,9 @@ class NumberPoolAPI:
         sid = self._get_session_id(pool_id, context["request_context"])
         curr_sid = self._get_session_id(pool_id, curr_context["request_context"])
         if sid != curr_sid:
-            raise NumberSessionKeyMismatch(
-                f"session key mismatch for {pool_id}/{number}, can not renew"
-            )
+            msg = f"session key mismatch for {pool_id}/{number}, can not renew"
+            warn(msg)
+            raise NumberSessionKeyMismatch(msg)
 
         if context != curr_context:
             # 2nd arg overwrites 1st on conflict
@@ -487,9 +487,9 @@ class NumberPoolAPI:
 
         context["renewed_at"] = time.time()
         if (context["renewed_at"] - context["leased_at"]) > NUMBER_POOL_MAX_RENEWAL_AGE:
-            raise NumberMaxRenewalExceeded(
-                f"Not renewing number {pool_id}/{number} due to max renewal time"
-            )
+            msg = f"Not renewing number {pool_id}/{number} due to max renewal time"
+            warn(msg)
+            raise NumberMaxRenewalExceeded(msg)
 
         res = self._update_taken_number(pool_id, number, context)
         raiseifnot(res, f"Failed to renew number: {pool_id}/{number}")

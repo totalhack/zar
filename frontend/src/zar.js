@@ -378,8 +378,8 @@ async function initTrackingPool({
     // once the service is back up. If it is the first call and the interval has never
     // been set, the service wouldn't retry unless initTrackingPool was called again.
     var msg = "pool: error getting number: " + JSON.stringify(e);
-    if (window.rollbar) {
-      window.rollbar.warning(msg);
+    if (window.Rollbar) {
+      window.Rollbar.warning(msg);
     }
     console.warn(msg);
     var errorRes = { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
