@@ -24,7 +24,13 @@ from app.number_pool import (
     NumberNotFound,
     NumberMaxRenewalExceeded,
 )
-from app.utils import print_request, extract_header_params, create_zar_dict, get_zar_ids
+from app.utils import (
+    print_request,
+    extract_header_params,
+    create_zar_dict,
+    get_zar_ids,
+    zar_cookie_params,
+)
 
 DAYS = 24 * 60 * 60
 CID_MAX_AGE = 2 * 365 * DAYS
@@ -78,15 +84,8 @@ def page(
     pk = pk[0] if pk else None
 
     id_dict = dict(vid=vid, sid=sid, cid=cid)
-    info(f"Setting response cookies: {id_dict}")
-
-    # https://www.starlette.io/responses/#set-cookie
-    response.set_cookie(
-        key=SID_COOKIE_NAME, value=sid, samesite="strict", max_age=SID_MAX_AGE
-    )
-    response.set_cookie(
-        key=CID_COOKIE_NAME, value=cid, samesite="strict", max_age=CID_MAX_AGE
-    )
+    response.set_cookie(**zar_cookie_params(SID_COOKIE_NAME, sid, max_age=SID_MAX_AGE))
+    response.set_cookie(**zar_cookie_params(CID_COOKIE_NAME, cid, max_age=CID_MAX_AGE))
 
     id_dict["id"] = pk
     return id_dict

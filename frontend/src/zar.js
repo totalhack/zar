@@ -15,8 +15,6 @@ var NUMBER_POOL_ERROR = 'error';
 var NUMBER_POOL_RENEWAL_TIME_MS = 30 * 1000;
 var POOL_DEFAULT_URL_FLAG = 'pl';
 var DAY_TTL = 1000 * 60 * 60 * 24; // In milliseconds
-var CID_TTL = DAY_TTL * 365 * 3; // N years, ~like GA
-var SID_TTL = DAY_TTL * 2; // N days, ~like GA
 // Pool session data is in localStorage but we don't want the pool flag to
 // stay set forever, even though the backend controls max renewal time.
 var POOL_STORAGE_TTL = DAY_TTL * 7;
@@ -54,35 +52,15 @@ function removeSessionStorage(key) {
   removeSessionItem(key);
 }
 
-function expireByTTL(idObj, ttl, debug) {
-  var diff = Date.now() - idObj.t;
-  if (diff >= ttl) {
-    if (debug) {
-      console.log('Expired after ', diff / 1000.0, 'seconds');
-    }
-    return true;
-  }
-  return false;
-}
-
-function expireSessionId(idObj, newVisit, debug) {
-  if (!newVisit) {
-    return false;
-  }
-  return expireByTTL(idObj, SID_TTL, debug);
-}
-
-function initId(key, expirationCallback, generator, getter, setter, newVisit, debug = false) {
+function initId(key, generator, getter, setter, debug = false) {
   var id;
   var isNew = false;
-  var visits;
   var origReferrer = null;
   var idObj = getter(key);
 
-  if (!idObj || !idObj.id || (expirationCallback && expirationCallback(idObj, newVisit, debug))) {
+  if (!idObj || !idObj.id) {
     id = generator();
     origReferrer = document.referrer;
-    visits = 1;
     isNew = true;
     if (debug) {
       console.log('Generated ID for', key, '-', id);
@@ -90,65 +68,83 @@ function initId(key, expirationCallback, generator, getter, setter, newVisit, de
   } else {
     id = idObj.id;
     origReferrer = idObj.origReferrer;
-    visits = (idObj.visits || 1) + (newVisit ? 1 : 0);
   }
 
-  var result = { id, t: Date.now(), origReferrer, isNew, visits };
+  var result = { id, t: Date.now(), origReferrer, isNew };
   setter(key, result);
   return result;
 }
 
-function initIds({
-  clientIdExpired = function (idObj, debug) { return expireByTTL(idObj, CID_TTL, debug); },
-  sessionIdExpired = expireSessionId,
-  visitIdExpired = null,
-  debug = false
-} = {}) {
-  var vidResult = initId(VID_KEY, visitIdExpired, generateVisitId, getSessionStorage, setSessionStorage, null, debug);
-  var cidResult = initId(CID_KEY, clientIdExpired, generateClientId, getItem, setItem, vidResult.isNew, debug);
-
-  // SID logic is a bit more complicated, as we rely on both sessionStorage
-  // and analytics' storage (usually localStorage) to track the session.
-  // The goal is to reuse non-expired SIDs when possible across visits but
-  // to also prevent an SID from being overwritten in an old tab due to
-  // an expiration in a new visit.
-
-  var sidResult;
-  var sidObj = getSIDObj(); // Checks sessionStorage
-  var sessionSid = sidObj && sidObj.id ? sidObj.id : null;
-  if (vidResult.isNew && sessionSid) {
-    console.warn('Found old sessionStorage SID with new VID');
-  }
-
-  if (!sessionSid) {
-    sidResult = initId(SID_KEY, sessionIdExpired, generateSessionId, getItem, setItem, vidResult.isNew, debug);
-    if (debug && !sidResult.isNew) {
-      console.log('Using existing SID from analytics storage');
-    }
-    sessionSid = sidResult.id;
-  } else {
-    // SID is in sessionStorage already. There should be one in analytics' storage too.
-    sidResult = sidObj;
-    sidResult.visits = sidResult.visits + (vidResult.isNew ? 1 : 0);
-    sidResult.isNew = false;
-    var analyticsSIDObj = getSIDObj({ getter: getItem });
-    if (!analyticsSIDObj || !analyticsSIDObj.id) {
-      console.warn('SID missing in analytics storage, setting from sessionStorage value');
-      setItem(SID_KEY, { id: sidResult.id, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew, visits: sidResult.visits });
-    }
-  }
-  // Set/reset sessionStorage SID either way
-  setSessionStorage(SID_KEY, { id: sessionSid, t: Date.now(), origReferrer: sidResult.origReferrer, isNew: sidResult.isNew, visits: sidResult.visits });
+function initIds({ debug = false } = {}) {
+  var vidResult = initId(VID_KEY, generateVisitId, getSessionStorage, setSessionStorage, debug);
+  var sidResult = initId(SID_KEY, generateSessionId, getSessionStorage, setSessionStorage, debug);
+  var cidResult = initId(CID_KEY, generateClientId, getSessionStorage, setSessionStorage, debug);
 
   // We store values globally in case the storage is reset mid-session
   window[CID_KEY] = cidResult;
   window[SID_KEY] = sidResult;
   window[VID_KEY] = vidResult;
+
   return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id };
 }
 
 function getDefaultApiUrl() {
   return window.location.host + '/api/v1';
+}
+
+function getIDObj(key) {
+  var obj = getSessionStorage(key);
+  if ((!obj) && window[key]) {
+    console.warn("got " + key + " from global var");
+    setSessionStorage(key, window[key]);
+    return window[key];
+  }
+  return obj;
+}
+
+function getID(key) {
+  var obj = getIDObj(key);
+  return obj ? obj.id : null;
+}
+
+function getStorage() {
+  return {
+    cid: getIDObj(CID_KEY),
+    sid: getIDObj(SID_KEY),
+    vid: getIDObj(VID_KEY)
+  };
+}
+
+function getIds() {
+  return {
+    cid: getID(CID_KEY),
+    sid: getID(SID_KEY),
+    vid: getID(VID_KEY)
+  };
+}
+
+function updateID(key, val) {
+  var obj = getIDObj(key);
+  if (!obj) {
+    console.warn("could not update " + key);
+    return;
+  }
+  obj.id = val;
+  setSessionStorage(key, obj);
+  window[key] = obj;
+}
+
+function removeID(key) {
+  removeSessionStorage(key);
+  if (window[key]) {
+    delete window[key];
+  }
+}
+
+function removeIds() {
+  removeID(VID_KEY);
+  removeID(SID_KEY);
+  removeID(CID_KEY);
 }
 
 async function getPoolNumber({ poolId, apiUrl, number = null, context = null }) {
@@ -445,119 +441,6 @@ async function initTrackingPool({
   return resp;
 }
 
-function getCIDObj({ getter = getItem, setter = setItem } = {}) {
-  var obj = getter(CID_KEY);
-  if ((!obj) && window[CID_KEY]) {
-    console.warn("got CID from global var");
-    setter(CID_KEY, window[CID_KEY]);
-    return window[CID_KEY];
-  }
-  return obj;
-}
-
-function getSIDObj({ getter = getSessionStorage, setter = setSessionStorage } = {}) {
-  var obj = getter(SID_KEY);
-  if ((!obj) && window[SID_KEY]) {
-    console.warn("got SID from global var");
-    setter(SID_KEY, window[SID_KEY]);
-    return window[SID_KEY];
-  }
-  return obj;
-}
-
-function getVIDObj({ getter = getSessionStorage, setter = setSessionStorage } = {}) {
-  var obj = getter(VID_KEY);
-  if ((!obj) && window[VID_KEY]) {
-    console.warn("got VID from global var");
-    setter(VID_KEY, window[VID_KEY]);
-    return window[VID_KEY];
-  }
-  return obj;
-}
-
-function getCID({ getter = getItem } = {}) {
-  var obj = getCIDObj({ getter });
-  return obj ? obj.id : null;
-}
-
-function getSID({ getter = getSessionStorage } = {}) {
-  var obj = getSIDObj({ getter });
-  return obj ? obj.id : null;
-}
-
-function getVID({ getter = getSessionStorage } = {}) {
-  var obj = getVIDObj({ getter });
-  return obj ? obj.id : null;
-}
-
-function getStorage() {
-  return {
-    cid: getCIDObj(),
-    sid: getSIDObj(),
-    vid: getVIDObj()
-  };
-}
-
-function getIds() {
-  return {
-    cid: getCID(),
-    sid: getSID(),
-    vid: getVID()
-  };
-}
-
-function updateCID(val) {
-  var obj = getCIDObj();
-  if (!obj) {
-    console.warn("could not update CID");
-    return;
-  }
-  obj.id = val;
-  setItem(CID_KEY, obj);
-  window[CID_KEY] = obj;
-}
-
-function updateSID(val) {
-  var obj = getSIDObj();
-  if (!obj) {
-    console.warn("could not update SID");
-    return;
-  }
-  obj.id = val;
-  setSessionStorage(SID_KEY, obj);
-  setItem(SID_KEY, obj);
-  window[SID_KEY] = obj;
-}
-
-
-function removeCID() {
-  removeItem(CID_KEY);
-  if (window[CID_KEY]) {
-    delete window[CID_KEY];
-  }
-}
-
-function removeSID() {
-  removeSessionStorage(SID_KEY);
-  removeItem(SID_KEY);
-  if (window[SID_KEY]) {
-    delete window[SID_KEY];
-  }
-}
-
-function removeVID() {
-  removeSessionStorage(VID_KEY);
-  if (window[VID_KEY]) {
-    delete window[VID_KEY];
-  }
-}
-
-function removeIds() {
-  removeVID();
-  removeSID();
-  removeCID();
-}
-
 function zar({ apiUrl }) {
   return {
     name: 'zar',
@@ -591,10 +474,11 @@ function zar({ apiUrl }) {
       var result = await httpPost({ url: `${config.apiUrl}/page`, data: payload });
       // We overwrite the session / client ID in case server-side values are different
       if (result.sid) {
-        updateSID(result.sid);
+        updateID(SID_KEY, result.sid);
       }
       if (result.cid) {
-        updateCID(result.cid);
+        updateID(CID_KEY, result.cid);
+        instance.setAnonymousId(result.cid);
       }
     },
     track: function ({ payload, options, instance, config }) {
@@ -626,13 +510,13 @@ function zar({ apiUrl }) {
         return getStorage();
       },
       getCID() {
-        return getCID();
+        return getID(CID_KEY);
       },
       getSID() {
-        return getSID();
+        return getID(SID_KEY);
       },
       getVID() {
-        return getVID();
+        return getID(VID_KEY);
       },
       hasAdBlock() {
         return hasAdBlock();

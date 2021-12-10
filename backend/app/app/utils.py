@@ -81,3 +81,14 @@ def get_zar_ids(zar, cookie_sid=None, cookie_cid=None):
         cid_dict["id"] = cid
         cid_dict["cookie_mismatch"] = True
     return vid, sid, cid
+
+
+def zar_cookie_params(key, value, **kwargs):
+    # https://www.starlette.io/responses/#set-cookie
+    params = dict(
+        key=key, value=value, samesite="strict", httponly=True, secure=False, path="/"
+    )
+    params.update(kwargs)
+    if params["max_age"]:
+        params["expires"] = params["max_age"]
+    return params
