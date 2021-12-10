@@ -86,7 +86,7 @@ def get_zar_ids(zar, cookie_sid=None, cookie_cid=None):
 def zar_cookie_params(key, value, **kwargs):
     # https://www.starlette.io/responses/#set-cookie
     params = dict(
-        key=key, value=value, samesite="strict", httponly=True, secure=False, path="/"
+        key=key, value=value, samesite="none", httponly=True, secure=True, path="/"
     )
     params.update(kwargs)
     if params["max_age"]:
