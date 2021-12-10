@@ -112,6 +112,7 @@ function makeRequest({ method, url, data, json = true }) {
   return new Promise(function (resolve, reject) {
     var xhr = new XMLHttpRequest();
     xhr.open(method, url);
+    xhr.withCredentials = true;
 
     if (json) {
       xhr.setRequestHeader("Accept", "application/json");

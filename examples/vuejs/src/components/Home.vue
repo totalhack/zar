@@ -52,8 +52,13 @@ export default {
       this.$analytics.identify('user@example.com', { attr1: 'val1', attr2: 'val2' });
     }
   },
-  created: function () {
+  mounted: function () {
     this.storage = this.$analytics.plugins.zar.getStorage();
+    // Storage may change if server-side cookies override SID/CID
+    var self = this;
+    setTimeout(function () {
+      self.storage = self.$analytics.plugins.zar.getStorage();
+    }, 1000);
   }
 };
 </script>

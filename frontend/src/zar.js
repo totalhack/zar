@@ -1,5 +1,6 @@
 import { Analytics } from 'analytics';
 import { getItem, setItem, removeItem } from '@analytics/storage-utils';
+import { getSessionItem, setSessionItem, removeSessionItem } from '@analytics/session-storage-utils';
 import googleAnalytics from '@analytics/google-analytics';
 import googleTagManager from '@analytics/google-tag-manager';
 
@@ -38,15 +39,19 @@ function generateVisitId() {
 }
 
 function setSessionStorage(key, obj) {
-  sessionStorage.setItem(key, JSON.stringify(obj));
+  setSessionItem(key, JSON.stringify(obj));
 }
 
 function getSessionStorage(key) {
-  return JSON.parse(sessionStorage.getItem(key));
+  var val = getSessionItem(key);
+  if (typeof val === 'undefined') {
+    return null;
+  }
+  return JSON.parse(val);
 }
 
 function removeSessionStorage(key) {
-  sessionStorage.removeItem(key);
+  removeSessionItem(key);
 }
 
 function expireByTTL(idObj, ttl, debug) {
@@ -501,6 +506,30 @@ function getIds() {
   };
 }
 
+function updateCID(val) {
+  var obj = getCIDObj();
+  if (!obj) {
+    console.warn("could not update CID");
+    return;
+  }
+  obj.id = val;
+  setItem(CID_KEY, obj);
+  window[CID_KEY] = obj;
+}
+
+function updateSID(val) {
+  var obj = getSIDObj();
+  if (!obj) {
+    console.warn("could not update SID");
+    return;
+  }
+  obj.id = val;
+  setSessionStorage(SID_KEY, obj);
+  setItem(SID_KEY, obj);
+  window[SID_KEY] = obj;
+}
+
+
 function removeCID() {
   removeItem(CID_KEY);
   if (window[CID_KEY]) {
@@ -555,11 +584,18 @@ function zar({ apiUrl }) {
       payload.properties.zar = getStorage();
       return payload;
     },
-    page: function ({ payload, options, instance, config }) {
+    page: async function ({ payload, options, instance, config }) {
       if (instance.getState('context').debug) {
         console.log('page', payload, options, config);
       }
-      httpPost({ url: `${config.apiUrl}/page`, data: payload });
+      var result = await httpPost({ url: `${config.apiUrl}/page`, data: payload });
+      // We overwrite the session / client ID in case server-side values are different
+      if (result.sid) {
+        updateSID(result.sid);
+      }
+      if (result.cid) {
+        updateCID(result.cid);
+      }
     },
     track: function ({ payload, options, instance, config }) {
       if (instance.getState('context').debug) {
@@ -571,7 +607,6 @@ function zar({ apiUrl }) {
       removeIds();
     },
     bootstrap: function ({ payload, config, instance }) {
-      // TODO: ability to override initIds params with zar() args
       var result = initIds({ debug: instance.getState('context').debug });
       instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
     },

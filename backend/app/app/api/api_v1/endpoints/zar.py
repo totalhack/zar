@@ -1,6 +1,6 @@
-from typing import Generator, Dict, Any
+from typing import Generator, Dict, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
 from sqlalchemy import insert
 from sqlalchemy.inspection import inspect
 from tlbx import st, json, info, warn, error
@@ -26,6 +26,12 @@ from app.number_pool import (
 )
 from app.utils import print_request, extract_header_params, create_zar_dict, get_zar_ids
 
+DAYS = 24 * 60 * 60
+CID_MAX_AGE = 2 * 365 * DAYS
+CID_COOKIE_NAME = "_zar_cid"
+SID_MAX_AGE = 7 * DAYS
+SID_COOKIE_NAME = "_zar_sid"
+
 router = APIRouter()
 
 # TODO add config to skip this
@@ -41,6 +47,9 @@ if settings.NUMBER_POOL_ENABLED:
 def page(
     body: PageRequestBody,
     request: Request,
+    response: Response,
+    _zar_sid: Optional[str] = Cookie(None),
+    _zar_cid: Optional[str] = Cookie(None),
     db: Generator = Depends(deps.get_db),
 ) -> Dict[str, Any]:
     body = dict(body)
@@ -50,7 +59,7 @@ def page(
 
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {}) or {}
-    vid, sid, cid = get_zar_ids(zar)
+    vid, sid, cid = get_zar_ids(zar, cookie_sid=_zar_sid, cookie_cid=_zar_cid)
 
     page_obj = models.Page(
         vid=vid,
@@ -67,13 +76,28 @@ def page(
     db.commit()
     pk = inspect(page_obj).identity
     pk = pk[0] if pk else None
-    return dict(id=pk)
+
+    id_dict = dict(vid=vid, sid=sid, cid=cid)
+    info(f"Setting response cookies: {id_dict}")
+
+    # https://www.starlette.io/responses/#set-cookie
+    response.set_cookie(
+        key=SID_COOKIE_NAME, value=sid, samesite="strict", max_age=SID_MAX_AGE
+    )
+    response.set_cookie(
+        key=CID_COOKIE_NAME, value=cid, samesite="strict", max_age=CID_MAX_AGE
+    )
+
+    id_dict["id"] = pk
+    return id_dict
 
 
 @router.post("/track", response_model=Dict[str, Any])
 def track(
     body: TrackRequestBody,
     request: Request,
+    _zar_sid: Optional[str] = Cookie(None),
+    _zar_cid: Optional[str] = Cookie(None),
     db: Generator = Depends(deps.get_db),
 ) -> Dict[str, Any]:
     body = dict(body)
@@ -83,7 +107,7 @@ def track(
 
     body["properties"] = body["properties"] or {}
     zar = body["properties"].get("zar", {})
-    vid, sid, cid = get_zar_ids(zar)
+    vid, sid, cid = get_zar_ids(zar, cookie_sid=_zar_sid, cookie_cid=_zar_cid)
     if "zar" in body["properties"]:
         # Can get this data from the page/visit info
         del body["properties"]["zar"]
@@ -110,6 +134,8 @@ def track(
 @router.get("/noscript", response_model=Dict[str, Any])
 def noscript(
     request: Request,
+    _zar_sid: Optional[str] = Cookie(None),
+    _zar_cid: Optional[str] = Cookie(None),
     db: Generator = Depends(deps.get_db),
 ) -> Dict[str, Any]:
     if settings.DEBUG:
@@ -123,7 +149,7 @@ def noscript(
         zar=zar,
     )
 
-    vid, sid, cid = get_zar_ids(zar)
+    vid, sid, cid = get_zar_ids(zar, cookie_sid=_zar_sid, cookie_cid=_zar_cid)
     page_obj = models.Page(
         vid=vid,
         sid=sid,
@@ -143,14 +169,19 @@ def noscript(
 
 
 @router.post("/number_pool", response_model=Dict[str, Any])
-def number_pool(body: NumberPoolRequestBody, request: Request) -> Dict[str, Any]:
+def number_pool(
+    body: NumberPoolRequestBody,
+    request: Request,
+    _zar_sid: Optional[str] = Cookie(None),
+    _zar_cid: Optional[str] = Cookie(None),
+) -> Dict[str, Any]:
     body = dict(body)
     if settings.DEBUG:
         print_request(request.headers, body)
     headers = extract_header_params(request.headers)
 
     zar = body["properties"].get("zar", {}) or {}
-    vid, sid, cid = get_zar_ids(zar)
+    vid, sid, cid = get_zar_ids(zar, cookie_sid=_zar_sid, cookie_cid=_zar_cid)
     if not sid:
         warn("No SID")
         return dict(

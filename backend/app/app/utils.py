@@ -2,7 +2,7 @@ import random
 import time
 import uuid
 
-from tlbx import pp
+from tlbx import pp, info
 
 
 def print_request(headers, body):
@@ -63,11 +63,21 @@ def create_zar_dict():
     )
 
 
-def get_zar_ids(zar):
+def get_zar_ids(zar, cookie_sid=None, cookie_cid=None):
     vid_dict = zar.get("vid", {})
     sid_dict = zar.get("sid", {})
     cid_dict = zar.get("cid", {})
     vid = vid_dict.get("id", None) if vid_dict else None
     sid = sid_dict.get("id", None) if sid_dict else None
     cid = cid_dict.get("id", None) if cid_dict else None
+    if cookie_sid and cookie_sid != sid:
+        info(f"Overwriting SID {sid} with cookie_sid {cookie_sid}")
+        sid = cookie_sid
+        sid_dict["id"] = sid
+        sid_dict["cookie_mismatch"] = True
+    if cookie_cid and cookie_cid != cid:
+        info(f"Overwriting CID {cid} with cookie_cid {cookie_cid}")
+        cid = cookie_cid
+        cid_dict["id"] = cid
+        cid_dict["cookie_mismatch"] = True
     return vid, sid, cid

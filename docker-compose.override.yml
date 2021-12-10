@@ -44,6 +44,12 @@ services:
     # This command comes with the base image:
     command: /start-reload.sh
 
+  redis:
+    image: "redis:alpine"
+    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    ports:
+      - "6379"
+
 volumes:
   app-db-data:
 

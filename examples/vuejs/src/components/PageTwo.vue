@@ -6,10 +6,18 @@
 </template>
 <script>
 export default {
-  computed: {
-    storage: function () {
-      return this.$analytics.plugins.zar.getStorage();
-    }
+  data: function () {
+    return {
+      storage: null
+    };
+  },
+  mounted: function () {
+    this.storage = this.$analytics.plugins.zar.getStorage();
+    // Storage may change if server-side cookies override SID/CID
+    var self = this;
+    setTimeout(function () {
+      self.storage = self.$analytics.plugins.zar.getStorage();
+    }, 1000);
   }
 };
 </script>

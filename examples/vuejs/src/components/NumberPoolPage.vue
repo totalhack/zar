@@ -37,13 +37,9 @@ export default {
   data: function () {
     return {
       poolInterval: null,
-      ctas: null
+      ctas: null,
+      storage: null
     };
-  },
-  computed: {
-    storage: function () {
-      return this.$analytics.plugins.zar.getStorage();
-    },
   },
   methods: {
     getCTAs: function () {
@@ -73,6 +69,7 @@ export default {
     }
   },
   mounted: async function () {
+    this.storage = this.$analytics.plugins.zar.getStorage();
     this.ctas = this.getCTAs();
     console.log("Initiliazing pool:", this.$props.poolId);
     const self = this;
@@ -89,6 +86,10 @@ export default {
     if (resp) {
       this.poolInterval = resp.interval;
     }
+    // Storage may change if server-side cookies override SID/CID
+    setTimeout(function () {
+      self.storage = self.$analytics.plugins.zar.getStorage();
+    }, 1000);
   },
   beforeDestroy() {
     this.revertOverlay();
