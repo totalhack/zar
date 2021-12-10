@@ -420,6 +420,10 @@ async function initTrackingPool({
     } else {
       seshData.poolNumbers[poolId] = resp;
     }
+    if (renew) {
+      // Assume its the initial call, reset pool session expiration
+      seshData.t = Date.now();
+    }
   } else {
     var poolNumbers = {};
     poolNumbers[poolId] = resp;
