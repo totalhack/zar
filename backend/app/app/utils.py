@@ -1,8 +1,9 @@
 import random
 import time
+from urllib.parse import urlparse
 import uuid
 
-from tlbx import pp, info
+from tlbx import pp, info, st
 
 
 def print_request(headers, body):
@@ -14,6 +15,7 @@ def print_request(headers, body):
 
 def extract_header_params(headers):
     host = headers.get("x-forwarded-host", None) or headers.get("host", None)
+    origin = headers.get("origin", None)
     ip = (
         headers.get("x-forwarded-for", None)
         or headers.get("x-real-ip", None)
@@ -21,7 +23,7 @@ def extract_header_params(headers):
     )
     user_agent = headers.get("user-agent", None)
     referer = headers.get("referer", None)
-    return dict(host=host, ip=ip, user_agent=user_agent, referer=referer)
+    return dict(host=host, origin=origin, ip=ip, user_agent=user_agent, referer=referer)
 
 
 TO_BASE_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -83,10 +85,27 @@ def get_zar_ids(zar, cookie_sid=None, cookie_cid=None):
     return vid, sid, cid
 
 
-def zar_cookie_params(key, value, **kwargs):
+def zar_cookie_params(key, value, headers, **kwargs):
     # https://www.starlette.io/responses/#set-cookie
+
+    domain = None
+    raw_domain = None
+    if headers["origin"]:
+        raw_domain = urlparse(headers["origin"]).netloc
+    elif headers["host"]:
+        raw_domain = headers["host"]
+
+    if raw_domain:
+        domain = ".".join(raw_domain.split(":")[0].split(".")[-2:])
+
     params = dict(
-        key=key, value=value, samesite="none", httponly=True, secure=True, path="/"
+        key=key,
+        value=value,
+        samesite="none",
+        httponly=True,
+        secure=True,
+        path="/",
+        domain=domain,
     )
     params.update(kwargs)
     if params["max_age"]:

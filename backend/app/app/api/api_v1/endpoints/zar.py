@@ -83,12 +83,14 @@ def page(
     pk = inspect(page_obj).identity
     pk = pk[0] if pk else None
 
-    id_dict = dict(vid=vid, sid=sid, cid=cid)
-    response.set_cookie(**zar_cookie_params(SID_COOKIE_NAME, sid, max_age=SID_MAX_AGE))
-    response.set_cookie(**zar_cookie_params(CID_COOKIE_NAME, cid, max_age=CID_MAX_AGE))
+    response.set_cookie(
+        **zar_cookie_params(SID_COOKIE_NAME, sid, headers, max_age=SID_MAX_AGE)
+    )
+    response.set_cookie(
+        **zar_cookie_params(CID_COOKIE_NAME, cid, headers, max_age=CID_MAX_AGE)
+    )
 
-    id_dict["id"] = pk
-    return id_dict
+    return dict(vid=vid, sid=sid, cid=cid, id=pk)
 
 
 @router.post("/track", response_model=Dict[str, Any])
