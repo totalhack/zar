@@ -21,7 +21,7 @@ redis = "^3.5.3"
 tlbx = ">= 0.1.18"
 # https://github.com/python-poetry/poetry/issues/2687
 black = "^19.10b0"
-orjson = "^3.3.0"
+orjson = "3.5.4"
 rollbar = "^0.15.1"
 
 [tool.poetry.dev-dependencies]

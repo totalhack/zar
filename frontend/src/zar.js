@@ -45,7 +45,16 @@ function getSessionStorage(key) {
   if (typeof val === 'undefined') {
     return null;
   }
-  return JSON.parse(val);
+  try {
+    return JSON.parse(val);
+  } catch (e) {
+    var msg = "getSessionStorage: JSON parse error for val: " + JSON.stringify(val) + " error: " + JSON.stringify(e);
+    if (window.Rollbar) {
+      window.Rollbar.warning(msg);
+    }
+    console.warn(msg);
+    return null;
+  }
 }
 
 function removeSessionStorage(key) {
