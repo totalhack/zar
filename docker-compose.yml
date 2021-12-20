@@ -33,6 +33,8 @@ services:
       dockerfile: backend.dockerfile
       args:
         INSTALL_DEV: ${INSTALL_DEV-false}
+    deploy:
+      replicas: ${ZAR_BACKEND_REPLICAS-1}
 
   redis:
     image: "redis:alpine"
