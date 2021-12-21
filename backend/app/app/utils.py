@@ -73,12 +73,10 @@ def get_zar_ids(zar, cookie_sid=None, cookie_cid=None):
     sid = sid_dict.get("id", None) if sid_dict else None
     cid = cid_dict.get("id", None) if cid_dict else None
     if cookie_sid and cookie_sid != sid:
-        info(f"Overwriting SID {sid} with cookie_sid {cookie_sid}")
         sid = cookie_sid
         sid_dict["id"] = sid
         sid_dict["cookie_mismatch"] = True
     if cookie_cid and cookie_cid != cid:
-        info(f"Overwriting CID {cid} with cookie_cid {cookie_cid}")
         cid = cookie_cid
         cid_dict["id"] = cid
         cid_dict["cookie_mismatch"] = True

@@ -1,5 +1,57 @@
 // Much in here is copied from analytics-utils to keep bundle size down
 
+import { get, set, remove, undef } from '@analytics/global-storage-utils';
+
+var supportsSessionStorage = hasSessionStorage();
+
+function hasSessionStorage() {
+  if (typeof supportsSessionStorage !== undef) {
+    return supportsSessionStorage;
+  }
+  supportsSessionStorage = true;
+  try {
+    sessionStorage.setItem(undef, undef);
+    sessionStorage.removeItem(undef);
+  } catch (e) {
+    supportsSessionStorage = false;
+  }
+  return supportsSessionStorage;
+}
+
+function getSessionStorage(key) {
+  // Get from SS if supported, fall back to global
+  var value;
+  var globalValue = get(key) || undefined;
+  if (supportsSessionStorage) {
+    value = sessionStorage.getItem(key);
+    if ((!value) && globalValue) {
+      value = globalValue;
+      // Restore session storage
+      sessionStorage.setItem(key, value);
+    }
+  } else {
+    value = globalValue;
+  }
+  return value ? JSON.parse(value) : undefined;
+}
+
+function setSessionStorage(key, value) {
+  // Set both SS (if supported) and global
+  var value_str = JSON.stringify(value);
+  if (supportsSessionStorage) {
+    sessionStorage.setItem(key, value_str);
+  }
+  set(key, value_str);
+}
+
+function removeSessionStorage(key) {
+  // Remove both SS (if supported) and global
+  if (supportsSessionStorage) {
+    sessionStorage.removeItem(key);
+  }
+  remove(key);
+}
+
 /* ref: http://bit.ly/2daP79j */
 var lut = []; for (var i = 0; i < 256; i++) { lut[i] = (i < 16 ? '0' : '') + (i).toString(16); }
 
@@ -172,4 +224,4 @@ async function httpPost({ url, data, json = true }) {
   return await makeRequest({ method: "POST", url, data: finalData, json });
 }
 
-export { uuid, hasAdBlock, paramsParse, httpGet, httpPost };
+export { getSessionStorage, setSessionStorage, removeSessionStorage, uuid, hasAdBlock, paramsParse, httpGet, httpPost };

@@ -1,10 +1,9 @@
 import { Analytics } from 'analytics';
-import { getItem, setItem, removeItem } from '@analytics/storage-utils';
-import { getSessionItem, setSessionItem, removeSessionItem } from '@analytics/session-storage-utils';
+import { getItem, setItem, removeItem, ALL } from '@analytics/storage-utils';
 import googleAnalytics from '@analytics/google-analytics';
 import googleTagManager from '@analytics/google-tag-manager';
 
-import { uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
+import { getSessionStorage, setSessionStorage, removeSessionStorage, uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
 
 var CID_KEY = '__zar_cid';
 var SID_KEY = '__zar_sid';
@@ -36,31 +35,6 @@ function generateVisitId() {
   return Date.now().toString(36) + '.' + Math.random().toString(36).substring(2);
 }
 
-function setSessionStorage(key, obj) {
-  setSessionItem(key, JSON.stringify(obj));
-}
-
-function getSessionStorage(key) {
-  var val = getSessionItem(key);
-  if (typeof val === 'undefined') {
-    return null;
-  }
-  try {
-    return JSON.parse(val);
-  } catch (e) {
-    var msg = "getSessionStorage: JSON parse error for val: " + JSON.stringify(val) + " error: " + JSON.stringify(e);
-    if (window.Rollbar) {
-      window.Rollbar.warning(msg);
-    }
-    console.warn(msg);
-    return null;
-  }
-}
-
-function removeSessionStorage(key) {
-  removeSessionItem(key);
-}
-
 function initId(key, generator, getter, setter, debug = false) {
   var id;
   var isNew = false;
@@ -88,12 +62,6 @@ function initIds({ debug = false } = {}) {
   var vidResult = initId(VID_KEY, generateVisitId, getSessionStorage, setSessionStorage, debug);
   var sidResult = initId(SID_KEY, generateSessionId, getSessionStorage, setSessionStorage, debug);
   var cidResult = initId(CID_KEY, generateClientId, getSessionStorage, setSessionStorage, debug);
-
-  // We store values globally in case the storage is reset mid-session
-  window[CID_KEY] = cidResult;
-  window[SID_KEY] = sidResult;
-  window[VID_KEY] = vidResult;
-
   return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id };
 }
 
@@ -102,13 +70,7 @@ function getDefaultApiUrl() {
 }
 
 function getIDObj(key) {
-  var obj = getSessionStorage(key);
-  if ((!obj) && window[key]) {
-    console.warn("got " + key + " from global var");
-    setSessionStorage(key, window[key]);
-    return window[key];
-  }
-  return obj;
+  return getSessionStorage(key);
 }
 
 function getID(key) {
@@ -140,14 +102,10 @@ function updateID(key, val) {
   }
   obj.id = val;
   setSessionStorage(key, obj);
-  window[key] = obj;
 }
 
 function removeID(key) {
   removeSessionStorage(key);
-  if (window[key]) {
-    delete window[key];
-  }
 }
 
 function removeIds() {
@@ -279,10 +237,7 @@ function revertOverlayNumbers({ elems, debug = false }) {
 }
 
 function removePoolSession({ overlayElements }) {
-  removeItem(NUMBER_POOL_KEY);
-  if (window[NUMBER_POOL_KEY]) {
-    delete window[NUMBER_POOL_KEY];
-  }
+  removeItem(NUMBER_POOL_KEY, ALL);
   revertOverlayNumbers({ elems: overlayElements });
 }
 
@@ -302,24 +257,8 @@ function poolSessionExpired(obj) {
   return false;
 }
 
-function getPoolSession({ overlayElements }) {
-  var data = getItem(NUMBER_POOL_KEY);
-  if ((!data) && window[NUMBER_POOL_KEY]) {
-    if (poolSessionExpired(window[NUMBER_POOL_KEY])) {
-      clearPoolIntervals(window[NUMBER_POOL_KEY]);
-      removePoolSession({ overlayElements });
-      return null;
-    }
-    console.warn("got number pool session from global var");
-    setItem(NUMBER_POOL_KEY, window[NUMBER_POOL_KEY]);
-    return window[NUMBER_POOL_KEY];
-  }
-  if (poolSessionExpired(data)) {
-    clearPoolIntervals(data);
-    removePoolSession({ overlayElements });
-    return null;
-  }
-  return data;
+function getPoolSession() {
+  return getItem(NUMBER_POOL_KEY);
 }
 
 async function initTrackingPool({
@@ -333,15 +272,21 @@ async function initTrackingPool({
   debug = false
 } = {}) {
   var poolEnabled = false;
-  var seshData = getPoolSession({ overlayElements });
+  var seshData = getPoolSession();
+  var expired = poolSessionExpired(seshData);
 
-  if (seshData && seshData.poolEnabled) {
-    poolEnabled = true;
-  } else {
-    var params = paramsParse(window.location.search);
-    if (urlParam in params && params[urlParam] === "1") {
+  if (!expired) {
+    if (seshData && seshData.poolEnabled) {
       poolEnabled = true;
+    } else {
+      var params = paramsParse(window.location.search);
+      if (urlParam in params && params[urlParam] === "1") {
+        poolEnabled = true;
+      }
     }
+  } else {
+    clearPoolIntervals(seshData);
+    removePoolSession({ overlayElements });
   }
 
   if (!poolEnabled) {
@@ -443,8 +388,7 @@ async function initTrackingPool({
     };
   }
 
-  window[NUMBER_POOL_KEY] = seshData;
-  setItem(NUMBER_POOL_KEY, seshData);
+  setItem(NUMBER_POOL_KEY, seshData, ALL);
   if (debug) {
     console.log('pool: saved session data ' + JSON.stringify(seshData));
   }
