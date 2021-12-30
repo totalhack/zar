@@ -4,6 +4,7 @@ const { merge } = require('webpack-merge');
 const BASE = {
   entry: './src/zar.js',
   mode: "production",
+  devtool: "source-map",
   resolve: {
     extensions: ['*', '.js']
   },
