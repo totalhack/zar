@@ -41,7 +41,7 @@ module.exports = [
     }),
   merge(BASE,
     {
-      name: 'full',
+      name: 'legacy',
       module: {
         rules: [
           {
@@ -51,7 +51,7 @@ module.exports = [
               {
                 loader: "babel-loader",
                 options: {
-                  envName: 'full'
+                  envName: 'legacy'
                 }
               }
             ]
@@ -59,7 +59,7 @@ module.exports = [
         ]
       },
       output: {
-        filename: 'zar.bundle.js',
+        filename: 'zar.legacy.bundle.js',
         // https://stackoverflow.com/questions/52821427/javascript-babel-preset-env-not-transpiling-arrow-functions-for-ie11
         // https://webpack.js.org/configuration/output/#outputenvironment
         environment: {
