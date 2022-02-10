@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "description": "Zillion Analytics Recorder",
   "main": "dist/zar.modern.bundle.js",
   "publishConfig": {
@@ -38,14 +38,14 @@
   "dependencies": {
     "@analytics/google-analytics": "^0.5.2",
     "@analytics/google-tag-manager": "^0.5.1",
-    "analytics": "^0.7.18",
-    "core-js": "^3.19.3"
+    "analytics": "^0.7.18"
   },
   "devDependencies": {
     "@babel/core": "^7.16.0",
     "@babel/preset-env": "^7.16.4",
     "babel-loader": "^8.2.3",
     "clean-webpack-plugin": "^3.0.0",
+    "core-js": "^3.19.3",
     "eslint": "^7.32.0",
     "eslint-plugin-compat": "^3.13.0",
     "webpack": "^5.65.0",
