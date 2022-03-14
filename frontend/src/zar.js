@@ -422,6 +422,7 @@ function zar({ apiUrl }) {
     },
     trackStart: function ({ payload, config, instance }) {
       payload.properties.zar = getStorage();
+      payload.properties.url = window.location.href;
       return payload;
     },
     page: async function ({ payload, options, instance, config }) {

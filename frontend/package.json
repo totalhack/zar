@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Zillion Analytics Recorder",
   "main": "dist/zar.modern.bundle.js",
   "publishConfig": {
@@ -60,7 +60,7 @@
             "@babel/preset-env",
             {
               "useBuiltIns": "usage",
-              "corejs": "3.6",
+              "corejs": "3.19",
               "targets": "> 1%"
             }
           ]
@@ -72,8 +72,8 @@
             "@babel/preset-env",
             {
               "useBuiltIns": "usage",
-              "corejs": "3.6",
-              "targets": "> 0.1%, not dead"
+              "corejs": "3.19",
+              "targets": "> 0.001%"
             }
           ]
         ]
