@@ -3,6 +3,7 @@ import { getItem, setItem, removeItem, ALL } from '@analytics/storage-utils';
 import googleAnalytics from '@analytics/google-analytics';
 import googleTagManager from '@analytics/google-tag-manager';
 
+import { googleAnalytics4 } from './googleAnalytics4';
 import { getSessionStorage, setSessionStorage, removeSessionStorage, uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
 
 var CID_KEY = '__zar_cid';
@@ -515,20 +516,24 @@ function zar({ apiUrl }) {
   };
 }
 
-function init({ app, gtmConfig, gaConfig, apiUrl = null, debug = false }) {
-  // Opinionated init of Analytics - Loads GA and GTM separately
+function init({ app, gtmConfig = null, gaConfig = null, ga4Config = null, apiUrl = null, debug = false }) {
+  // Opinionated init of Analytics
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
   }
-  return Analytics({
-    app,
-    debug,
-    plugins: [
-      zar({ apiUrl }),
-      googleAnalytics(gaConfig),
-      googleTagManager(gtmConfig)
-    ]
-  });
+
+  var plugins = [zar({ apiUrl })];
+  if (ga4Config) {
+    plugins.push(googleAnalytics4(ga4Config));
+  }
+  if (gaConfig) {
+    plugins.push(googleAnalytics(gaConfig));
+  }
+  if (gtmConfig) {
+    plugins.push(googleTagManager(gtmConfig));
+  }
+
+  return Analytics({ app, debug, plugins });
 }
 
 export { init, zar, Analytics };

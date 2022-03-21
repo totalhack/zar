@@ -24,6 +24,15 @@ const analytics = init({
   gaConfig: {
     trackingId: process.env.VUE_APP_GA_TRACKING_ID
   },
+  ga4Config: {
+    trackingId: process.env.VUE_APP_GA4_TRACKING_ID,
+    customDimensions: [
+      {
+        'name': 'vid',
+        'callback': function (instance, config) { return instance.plugins.zar.getVID() }
+      }
+    ]
+  },
   apiUrl: 'http://localhost/api/v1',
   debug: true,
 });
