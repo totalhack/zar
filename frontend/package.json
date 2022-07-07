@@ -2,28 +2,13 @@
   "name": "zar",
   "version": "0.0.22",
   "description": "Zillion Analytics Recorder",
-  "main": "dist/zar.modern.bundle.js",
   "publishConfig": {
     "access": "public"
-  },
-  "scripts": {
-    "serve": "node src/zar.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "update-browsers": "browserslist --update-db",
-    "lint": "eslint src",
-    "build": "rm dist/*; webpack --mode production",
-    "build:dev": "rm dist/*; webpack --mode development",
-    "stats": "webpack --mode production --profile --json > ~/webpack-stats.json",
-    "stats:dev": "webpack --mode development --profile --json > ~/webpack-stats-dev.json"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/totalhack/zar.git"
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
   "keywords": [
     "analytics",
     "tracking",
@@ -35,49 +20,34 @@
     "url": "https://github.com/totalhack/zar/issues"
   },
   "homepage": "https://github.com/totalhack/zar#readme",
+  "main": "./dist/zar.umd.js",
+  "module": "./dist/zar.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/zar.es.js",
+      "require": "./dist/zar.umd.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "pub": "vite build && npm publish",
+    "patch": "npm version patch --force --commit-hooks false",
+    "patchpub": "vite build && npm version patch --force --commit-hooks false && npm publish"
+  },
   "dependencies": {
     "@analytics/global-storage-utils": "0.1.2",
     "@analytics/google-tag-manager": "^0.5.2",
     "analytics": "0.7.18"
   },
   "devDependencies": {
-    "@babel/core": "^7.16.0",
-    "@babel/preset-env": "^7.16.4",
-    "babel-loader": "^8.2.3",
-    "clean-webpack-plugin": "^3.0.0",
-    "core-js": "^3.19.3",
+    "vite": "2.9.4",
     "eslint": "^7.32.0",
-    "eslint-plugin-compat": "^3.13.0",
-    "webpack": "^5.65.0",
-    "webpack-cli": "^4.9.1",
-    "webpack-merge": "^5.8.0"
-  },
-  "babel": {
-    "env": {
-      "modern": {
-        "presets": [
-          [
-            "@babel/preset-env",
-            {
-              "useBuiltIns": "usage",
-              "corejs": "3.19",
-              "targets": "> 1%"
-            }
-          ]
-        ]
-      },
-      "legacy": {
-        "presets": [
-          [
-            "@babel/preset-env",
-            {
-              "useBuiltIns": "usage",
-              "corejs": "3.19",
-              "targets": "> 0.001%"
-            }
-          ]
-        ]
-      }
-    }
+    "eslint-plugin-compat": "^3.13.0"
   }
 }

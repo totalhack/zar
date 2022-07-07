@@ -15,7 +15,6 @@ module.exports = {
         "vue"
     ],
     "rules": {
-        "semi": 0,
         "no-console": 0,
         "no-unused-vars": 0,
         "no-debugger": 0
