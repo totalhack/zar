@@ -3,7 +3,7 @@ import { getItem, setItem, removeItem, ALL } from '@analytics/storage-utils';
 import googleTagManager from '@analytics/google-tag-manager';
 
 import { googleAnalytics4 } from './googleAnalytics4';
-import { getSessionStorage, setSessionStorage, removeSessionStorage, uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
+import { dbg, getSessionStorage, setSessionStorage, removeSessionStorage, uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
 
 var CID_KEY = '__zar_cid';
 var SID_KEY = '__zar_sid';
@@ -35,7 +35,7 @@ function generateVisitId() {
   return Date.now().toString(36) + '.' + Math.random().toString(36).substring(2);
 }
 
-function initId(key, generator, getter, setter, debug = false) {
+function initId(key, generator, getter, setter) {
   var id;
   var isNew = false;
   var origReferrer = null;
@@ -45,9 +45,7 @@ function initId(key, generator, getter, setter, debug = false) {
     id = generator();
     origReferrer = document.referrer;
     isNew = true;
-    if (debug) {
-      console.log('Generated ID for', key, '-', id);
-    }
+    dbg('Generated ID for', key, '-', id);
   } else {
     id = idObj.id;
     origReferrer = idObj.origReferrer;
@@ -58,10 +56,10 @@ function initId(key, generator, getter, setter, debug = false) {
   return result;
 }
 
-function initIds({ debug = false } = {}) {
-  var vidResult = initId(VID_KEY, generateVisitId, getSessionStorage, setSessionStorage, debug);
-  var sidResult = initId(SID_KEY, generateSessionId, getSessionStorage, setSessionStorage, debug);
-  var cidResult = initId(CID_KEY, generateClientId, getSessionStorage, setSessionStorage, debug);
+function initIds() {
+  var vidResult = initId(VID_KEY, generateVisitId, getSessionStorage, setSessionStorage);
+  var sidResult = initId(SID_KEY, generateSessionId, getSessionStorage, setSessionStorage);
+  var cidResult = initId(CID_KEY, generateClientId, getSessionStorage, setSessionStorage);
   return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id };
 }
 
@@ -156,7 +154,7 @@ function extractPhoneNumber({ elem }) {
   return { text, html, numberText, href, number };
 }
 
-function overlayPhoneNumber({ elems, number, debug = false }) {
+function overlayPhoneNumber({ elems, number }) {
   var origNum;
   var overlayNum = number;
   if (!number.startsWith("+1")) {
@@ -165,9 +163,7 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
 
   for (var i = 0; i < elems.length; i++) {
     if (numberOverlayMap.has(elems[i])) {
-      if (debug) {
-        console.log("pool: skipping element already in overlay map:", elems[i]);
-      }
+      dbg("pool: skipping element already in overlay map:", elems[i]);
       continue;
     }
 
@@ -179,9 +175,7 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
       console.warn('pool: overlaying multiple phone numbers with a single number!', origNum.number, elemNum.number);
     }
 
-    if (debug) {
-      console.log("pool: overlaying number", overlayNum, "on", elems[i]);
-    }
+    dbg("pool: overlaying number", overlayNum, "on", elems[i]);
 
     // Store the original values
     numberOverlayMap.set(elems[i], elemNum);
@@ -204,34 +198,26 @@ function overlayPhoneNumber({ elems, number, debug = false }) {
         elems[i].appendChild(document.createTextNode(overlayNum));
       }
     } else {
-      if (debug) {
-        console.log("pool: no number text found on", elems[i]);
-      }
+      dbg("pool: no number text found on", elems[i]);
     }
   }
 }
 
-function revertOverlayNumbers({ elems, debug = false }) {
+function revertOverlayNumbers({ elems }) {
   for (var i = 0; i < elems.length; i++) {
     if (numberOverlayMap.has(elems[i])) {
       var currentHTML = elems[i].innerHTML;
       var origElemData = numberOverlayMap.get(elems[i]);
-      if (debug) {
-        console.log("orig:", origElemData);
-      }
+      dbg("orig:", origElemData);
       var origHTML = origElemData.html;
-      if (debug) {
-        console.log("pool: reverting", currentHTML, "to", origHTML);
-      }
+      dbg("pool: reverting", currentHTML, "to", origHTML);
       elems[i].innerHTML = origHTML;
       if (origElemData.href) {
         elems[i].href = origElemData.href;
       }
       numberOverlayMap.delete(elems[i]);
     } else {
-      if (debug) {
-        console.log("pool: element not in map:", elems[i]);
-      }
+      dbg("pool: element not in map:", elems[i]);
     }
   }
 }
@@ -268,8 +254,7 @@ async function initTrackingPool({
   urlParam = POOL_DEFAULT_URL_FLAG,
   renew = true,
   renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS,
-  callback = null,
-  debug = false
+  callback = null
 } = {}) {
   var poolEnabled = false;
   var seshData = getPoolSession();
@@ -290,9 +275,7 @@ async function initTrackingPool({
   }
 
   if (!poolEnabled) {
-    if (debug) {
-      console.log('pool: not enabled');
-    }
+    dbg('pool: not enabled');
     if (callback) {
       callback(null);
     }
@@ -307,9 +290,7 @@ async function initTrackingPool({
     seshInterval = poolResult.interval;
     if (poolResult.status !== NUMBER_POOL_SUCCESS) {
       // Prevents previously failed sessions from trying again
-      if (debug) {
-        console.log('pool: returning cached unsuccessful pool result: ' + JSON.stringify(poolResult));
-      }
+      dbg('pool: returning cached unsuccessful pool result: ' + JSON.stringify(poolResult));
       if (callback) {
         callback(poolResult);
       }
@@ -317,9 +298,7 @@ async function initTrackingPool({
     }
     if (poolResult.number) {
       seshNumber = poolResult.number;
-      if (debug) {
-        console.log('pool: found session number ' + seshNumber);
-      }
+      dbg('pool: found session number ' + seshNumber);
     }
   }
 
@@ -346,21 +325,19 @@ async function initTrackingPool({
 
   if (resp.status === NUMBER_POOL_SUCCESS && resp.number) {
     if (overlayElements) {
-      overlayPhoneNumber({ elems: overlayElements, number: resp.number, debug });
+      overlayPhoneNumber({ elems: overlayElements, number: resp.number });
     }
 
     if (renew) {
-      if (debug) {
-        console.log("pool: setting up renewal");
-      }
+      dbg("pool: setting up renewal");
       resp.interval = setInterval(
-        function () { initTrackingPool({ poolId, overlayElements, apiUrl, urlParam, renew: false, debug }); },
+        function () { initTrackingPool({ poolId, overlayElements, apiUrl, urlParam, renew: false }); },
         renewalInterval
       );
     }
   } else {
     if (overlayElements) {
-      revertOverlayNumbers({ elems: overlayElements, debug });
+      revertOverlayNumbers({ elems: overlayElements });
     }
     if (seshInterval) {
       clearInterval(seshInterval);
@@ -389,9 +366,7 @@ async function initTrackingPool({
   }
 
   setItem(NUMBER_POOL_KEY, seshData, ALL);
-  if (debug) {
-    console.log('pool: saved session data ' + JSON.stringify(seshData));
-  }
+  dbg('pool: saved session data ' + JSON.stringify(seshData));
   if (callback) {
     callback(resp);
   }
@@ -426,9 +401,7 @@ function zar({ apiUrl }) {
       return payload;
     },
     page: async function ({ payload, options, instance, config }) {
-      if (instance.getState('context').debug) {
-        console.log('page', payload, options, config);
-      }
+      dbg('page', payload, options, config);
       var result = await httpPost({ url: `${config.apiUrl}/page`, data: payload });
       // We overwrite the session / client ID in case server-side values are different
       if (result.sid) {
@@ -440,16 +413,14 @@ function zar({ apiUrl }) {
       }
     },
     track: function ({ payload, options, instance, config }) {
-      if (instance.getState('context').debug) {
-        console.log('track', payload);
-      }
-      httpPost({ url: `${config.apiUrl}/track`, data: payload });
+      dbg('track', payload);
+      httpPost({ url: `${config.apiUrl}/track`, data: payload, beacon: true });
     },
     reset: function ({ instance }) {
       removeIds();
     },
     bootstrap: function ({ payload, config, instance }) {
-      var result = initIds({ debug: instance.getState('context').debug });
+      var result = initIds();
       instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
     },
     methods: {
@@ -457,7 +428,7 @@ function zar({ apiUrl }) {
         return apiUrl;
       },
       initIds() {
-        var result = initIds({ debug: this.instance.getState('context').debug });
+        var result = initIds();
         this.instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
         return result;
       },
@@ -487,8 +458,7 @@ function zar({ apiUrl }) {
           urlParam,
           renew,
           renewalInterval,
-          callback,
-          debug: this.instance.getState('context').debug
+          callback
         });
       },
       extractPhoneNumbers({ elems }) {
@@ -515,7 +485,7 @@ function zar({ apiUrl }) {
   };
 }
 
-function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null, debug = false }) {
+function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null }) {
   // Opinionated init of Analytics
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
@@ -529,7 +499,7 @@ function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null, debug = 
     plugins.push(googleTagManager(gtmConfig));
   }
 
-  return Analytics({ app, debug, plugins });
+  return Analytics({ app, plugins });
 }
 
 export { init, zar, Analytics };

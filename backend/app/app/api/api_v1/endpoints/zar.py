@@ -1,6 +1,7 @@
 from typing import Generator, Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
+from pydantic import ValidationError
 from sqlalchemy import insert
 from sqlalchemy.inspection import inspect
 from tlbx import st, json, info, warn, error
@@ -94,13 +95,30 @@ def page(
 
 
 @router.post("/track", response_model=Dict[str, Any])
-def track(
-    body: TrackRequestBody,
+async def track(
     request: Request,
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
     db: Generator = Depends(deps.get_db),
 ) -> Dict[str, Any]:
+
+    body_data = None
+    if request.headers["content-type"] == "application/x-www-form-urlencoded":
+        body_data = await request.form()
+    elif request.headers["content-type"] == "application/json":
+        body_data = await request.json()
+    elif "text/plain" in request.headers["content-type"]:
+        body_data = await request.body()
+        body_data = json.loads(body_data)
+    else:
+        raise HTTPException(status_code=422, detail="Invalid content")
+
+    try:
+        body = TrackRequestBody(**body_data)
+    except ValidationError as e:
+        warn(body_data)
+        raise HTTPException(status_code=422, detail="TrackRequestBody: " + str(e))
+
     body = dict(body)
     if settings.DEBUG:
         print_request(request.headers, body)

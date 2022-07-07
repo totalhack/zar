@@ -3,9 +3,9 @@ import App from './App.vue';
 import VueRouter from 'vue-router';
 import updatePageTags from './utils/updatePageTags';
 import routes from './routes';
-// import { init } from '../../../frontend/src/zar';
+import { init } from '../../../frontend/src/zar';
 // To test from built dist bundle:
-import { init } from '../../../frontend/dist/zar.umd.js';
+// import { init } from '../../../frontend/dist/zar.umd.js';
 
 Vue.config.productionTip = false;
 Vue.use(VueRouter);
@@ -28,8 +28,7 @@ const analytics = init({
       }
     ]
   },
-  apiUrl: 'http://localhost/api/v1',
-  debug: true,
+  apiUrl: 'http://localhost/api/v1'
 });
 
 analytics.on('ready', () => {

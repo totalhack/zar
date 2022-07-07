@@ -2,6 +2,14 @@
 
 import { get, set, remove, undef } from '@analytics/global-storage-utils';
 
+var urlParams = new URLSearchParams(window.location.search);
+var DEBUG = urlParams.get('zdbg');
+
+export function dbg() {
+  if (DEBUG != 1) return;
+  console.debug(...arguments);
+}
+
 var supportsSessionStorage = hasSessionStorage();
 
 function hasSessionStorage() {
@@ -18,7 +26,7 @@ function hasSessionStorage() {
   return supportsSessionStorage;
 }
 
-function getSessionStorage(key) {
+export function getSessionStorage(key) {
   // Get from SS if supported, fall back to global
   var value;
   var globalValue = get(key) || undefined;
@@ -35,7 +43,7 @@ function getSessionStorage(key) {
   return value ? JSON.parse(value) : undefined;
 }
 
-function setSessionStorage(key, value) {
+export function setSessionStorage(key, value) {
   // Set both SS (if supported) and global
   var value_str = JSON.stringify(value);
   if (supportsSessionStorage) {
@@ -44,7 +52,7 @@ function setSessionStorage(key, value) {
   set(key, value_str);
 }
 
-function removeSessionStorage(key) {
+export function removeSessionStorage(key) {
   // Remove both SS (if supported) and global
   if (supportsSessionStorage) {
     sessionStorage.removeItem(key);
@@ -55,7 +63,7 @@ function removeSessionStorage(key) {
 /* ref: http://bit.ly/2daP79j */
 var lut = []; for (var i = 0; i < 256; i++) { lut[i] = (i < 16 ? '0' : '') + (i).toString(16); }
 
-function uuid() {
+export function uuid() {
   var d0 = Math.random() * 0x100000000 >>> 0;
   var d1 = Math.random() * 0x100000000 >>> 0;
   var d2 = Math.random() * 0x100000000 >>> 0;
@@ -76,7 +84,7 @@ function decode(s) {
   }
 }
 
-function hasAdBlock() {
+export function hasAdBlock() {
   if (!inBrowser) return false;
   // Create fake ad
   var fakeAd = document.createElement('div');
@@ -107,7 +115,6 @@ function hasAdBlock() {
   return false;
 }
 
-
 function getSearchString(url) {
   if (url) {
     var p = url.match(/\?(.*)/);
@@ -116,10 +123,9 @@ function getSearchString(url) {
   return inBrowser && window.location.search.substring(1);
 }
 
-export default function paramsParse(url) {
+export function paramsParse(url) {
   return getParamsAsObject(getSearchString(url));
 }
-
 
 function getParamsAsObject(query) {
   var params = {};
@@ -208,7 +214,24 @@ function formatParams(params) {
     .join("&");
 }
 
-async function httpGet({ url, params = null, json = true }) {
+async function postBeacon({ url, data }) {
+  if (window &&
+    window.navigator &&
+    typeof window.navigator.sendBeacon === "function" &&
+    typeof window.Blob === "function") {
+    try {
+      if (window.navigator.sendBeacon(url, JSON.stringify(data))) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function httpGet({ url, params = null, json = true }) {
   var finalUrl = url;
   if (params) {
     finalUrl = finalUrl + formatParams(params);
@@ -216,12 +239,18 @@ async function httpGet({ url, params = null, json = true }) {
   return await makeRequest({ method: "GET", url: finalUrl, json });
 }
 
-async function httpPost({ url, data, json = true }) {
+export async function httpPost({ url, data, json = true, beacon = false }) {
   var finalData = data;
   if (json) {
     finalData = JSON.stringify(finalData);
   }
+  if (beacon) {
+    var res = await postBeacon({ url, data });
+    if (res) {
+      return;
+    }
+    dbg('Beacon failed')
+  }
   return await makeRequest({ method: "POST", url, data: finalData, json });
 }
 
-export { getSessionStorage, setSessionStorage, removeSessionStorage, uuid, hasAdBlock, paramsParse, httpGet, httpPost };

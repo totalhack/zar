@@ -20,6 +20,7 @@ module.exports = {
         "no-debugger": 0
     },
     "settings": {
-        "polyfills": ["Promise"]
+        "polyfills": ["Promise"],
+        "targets": null
     }
 };

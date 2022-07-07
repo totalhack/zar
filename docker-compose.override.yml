@@ -16,6 +16,7 @@ services:
       - app-db-data:/var/lib/mysql/
 
   backend:
+    image: zar-backend
     stdin_open: true
     tty: true
     ports:
