@@ -11,6 +11,7 @@ export default defineConfig({
       fileName: (format) => `zar.${format}.js`
     },
     // Prevents minification from using syntax only supported by recent browsers
-    target: 'es6'
+    target: 'es6',
+    sourcemap: true
   }
 });
