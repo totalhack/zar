@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-undef
 module.exports = {
     "env": {
         "browser": true,
@@ -12,7 +13,7 @@ module.exports = {
         "no-console": 0,
         "no-unused-vars": 0,
         "no-debugger": 0,
-        "semi": [2, "always"],
+        "semi": [2, "always"]
     },
     "settings": {
         "polyfills": ["Promise"]

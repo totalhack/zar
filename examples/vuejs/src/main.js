@@ -21,9 +21,6 @@ const analytics = init({
   gtmConfig: {
     containerId: process.env.VUE_APP_GTM_CONTAINER_ID
   },
-  gaConfig: {
-    trackingId: process.env.VUE_APP_GA_TRACKING_ID
-  },
   ga4Config: {
     trackingId: process.env.VUE_APP_GA4_TRACKING_ID,
     customDimensions: [
@@ -38,7 +35,6 @@ const analytics = init({
 });
 
 analytics.on('ready', () => {
-  console.log('GA', window.ga);
   console.log('hasAdBlock', analytics.plugins.zar.hasAdBlock());
 });
 

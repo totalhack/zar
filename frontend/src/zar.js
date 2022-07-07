@@ -1,6 +1,5 @@
 import { Analytics } from 'analytics';
 import { getItem, setItem, removeItem, ALL } from '@analytics/storage-utils';
-import googleAnalytics from '@analytics/google-analytics';
 import googleTagManager from '@analytics/google-tag-manager';
 
 import { googleAnalytics4 } from './googleAnalytics4';
@@ -403,7 +402,7 @@ function zar({ apiUrl }) {
   return {
     name: 'zar',
     config: {
-      apiUrl: apiUrl,
+      apiUrl: apiUrl
     },
     initialize: function ({ config }) { },
     loaded: function () { return true; },
@@ -516,7 +515,7 @@ function zar({ apiUrl }) {
   };
 }
 
-function init({ app, gtmConfig = null, gaConfig = null, ga4Config = null, apiUrl = null, debug = false }) {
+function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null, debug = false }) {
   // Opinionated init of Analytics
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
@@ -526,9 +525,6 @@ function init({ app, gtmConfig = null, gaConfig = null, ga4Config = null, apiUrl
   if (ga4Config) {
     plugins.push(googleAnalytics4(ga4Config));
   }
-  if (gaConfig) {
-    plugins.push(googleAnalytics(gaConfig));
-  }
   if (gtmConfig) {
     plugins.push(googleTagManager(gtmConfig));
   }
@@ -537,5 +533,3 @@ function init({ app, gtmConfig = null, gaConfig = null, ga4Config = null, apiUrl
 }
 
 export { init, zar, Analytics };
-
-

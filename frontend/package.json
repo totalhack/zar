@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "Zillion Analytics Recorder",
   "main": "dist/zar.modern.bundle.js",
   "publishConfig": {
@@ -36,9 +36,9 @@
   },
   "homepage": "https://github.com/totalhack/zar#readme",
   "dependencies": {
-    "@analytics/google-analytics": "^0.5.2",
-    "@analytics/google-tag-manager": "^0.5.1",
-    "analytics": "^0.7.18"
+    "@analytics/global-storage-utils": "0.1.2",
+    "@analytics/google-tag-manager": "^0.5.2",
+    "analytics": "0.7.18"
   },
   "devDependencies": {
     "@babel/core": "^7.16.0",

@@ -38,7 +38,7 @@ services:
       replicas: ${ZAR_BACKEND_REPLICAS-1}
 
   redis:
-    image: "redis:alpine"
+    image: "redis:6.2.7-alpine"
     command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --appendonly no
     ports:
       - "6379"
