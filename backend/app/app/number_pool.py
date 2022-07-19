@@ -120,12 +120,11 @@ class NumberPoolAPI:
     track the numbers with the oldest renewal time for reclaiming to the pool (if
     they are past expiration).
 
-    * TODO switch to using pipelines where possible: https://github.com/andymccurdy/redis-py#pipelines
     * TODO add number limits by request ip/user agent/host
     """
 
     def __init__(self, conn_tries=NUMBER_POOL_CONNECT_TRIES):
-        # NOTE: It is assumed the pool has be initialized by an outside process,
+        # NOTE: It is assumed the pool has been initialized by an outside process,
         # such as in a prestart command for the service.
         self.conn = get_number_pool_conn(tries=conn_tries)
         if not self.conn:
@@ -268,17 +267,17 @@ class NumberPoolAPI:
                 if target_number:
                     status, ctx = self.get_number_status(target_number)
                     if status == NumberStatus.FREE:
-                        info(f"{request_sid}: target number {target_number} free")
+                        dbg(f"{request_sid}: target number {target_number} free")
                         number = self._lease_free_number(
                             pool_id, target_number, request_context
                         )
                     elif status == NumberStatus.EXPIRED:
-                        info(f"{request_sid}: target number {target_number} expired")
+                        dbg(f"{request_sid}: target number {target_number} expired")
                         number = self._lease_expired_number(
                             pool_id, target_number, request_context
                         )
                     elif status == NumberStatus.TAKEN and renew:
-                        info(
+                        dbg(
                             f"{request_sid}: target number {target_number} taken, renewal requested"
                         )
                         if request_context:
@@ -298,7 +297,7 @@ class NumberPoolAPI:
         except LockError as e:
             raise NumberPoolUnavailable(f"Could not acquire pool {pool_id} lock")
 
-        info(f"{request_sid}: took {time.time() - start:0.3f}s, number: {number}")
+        dbg(f"{request_sid}: took {time.time() - start:0.3f}s, number: {number}")
         if not number:
             msg = "No numbers available"
             if from_sid:
@@ -466,7 +465,7 @@ class NumberPoolAPI:
 
     def _renew_number(self, pool_id, number, context=None):
         """Expected to be called with a number that is 'taken'"""
-        info(f"Renewing number {pool_id}/{number}")
+        dbg(f"Renewing number {pool_id}/{number}")
 
         curr_context = self.get_number_context(number)
         raiseif(curr_context is None, "Trying to renew inactive number")
@@ -499,7 +498,7 @@ class NumberPoolAPI:
     def _lease_random_number(self, pool_id, request_context):
         number = self._pop_random_number(pool_id)
         if not number:
-            info("No free numbers found, checking expired...")
+            dbg("No free numbers found, checking expired...")
             res = self._get_least_recently_renewed(pool_id)
             raiseifnot(res, "No least recently renewed number?")
             target_number, renewed_at = res
@@ -516,7 +515,6 @@ class NumberPoolAPI:
         return number
 
     def _lease_free_number(self, pool_id, number, request_context):
-        # TODO do this in a pipeline as one operation for efficiency
         info(f"Leasing free number: {pool_id}/{number}")
         res = self._pop_free_number(pool_id, number)
         if not res:

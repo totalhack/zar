@@ -1,3 +1,4 @@
+import time
 from typing import Generator, Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
@@ -194,6 +195,7 @@ def number_pool(
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
 ) -> Dict[str, Any]:
+    start = time.time()
     body = dict(body)
     if settings.DEBUG:
         print_request(request.headers, body)
@@ -259,7 +261,7 @@ def number_pool(
             msg=NumberPoolResponseMessages.MAX_RENEWAL,
         )
 
-    info(res)
+    info(f"took: {time.time() - start:0.3f}s, {res}")
     return res
 
 
