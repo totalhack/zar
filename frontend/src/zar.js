@@ -3,7 +3,18 @@ import { getItem, setItem, removeItem, ALL } from '@analytics/storage-utils';
 import googleTagManager from '@analytics/google-tag-manager';
 
 import { googleAnalytics4 } from './googleAnalytics4';
-import { dbg, getSessionStorage, setSessionStorage, removeSessionStorage, uuid, hasAdBlock, paramsParse, httpGet, httpPost } from './utils';
+import {
+  dbg,
+  getSessionStorage,
+  setSessionStorage,
+  removeSessionStorage,
+  uuid,
+  hasAdBlock,
+  urlParams,
+  httpGet,
+  httpPost,
+  rbWarning
+} from './utils';
 
 var CID_KEY = '__zar_cid';
 var SID_KEY = '__zar_sid';
@@ -192,8 +203,13 @@ function overlayPhoneNumber({ elems, number }) {
         if (elemNum.numberText.indexOf("-") > -1) {
           overlay = overlayNum.slice(2, 5) + "-" + overlayNum.slice(5, 8) + "-" + overlayNum.slice(8, 12);
         }
-        var numberText = elemNum.text.replace(elemNum.numberText, overlay);
-        elems[i].appendChild(document.createTextNode(numberText));
+        if (elemNum.html.indexOf('<img') > -1) {
+          var numberHtml = elemNum.html.replace(elemNum.numberText, overlay);
+          elems[i].innerHTML = numberHtml;
+        } else {
+          var numberText = elemNum.text.replace(elemNum.numberText, overlay);
+          elems[i].appendChild(document.createTextNode(numberText));
+        }
       } else {
         elems[i].appendChild(document.createTextNode(overlayNum));
       }
@@ -264,8 +280,7 @@ async function initTrackingPool({
     if (seshData && seshData.poolEnabled) {
       poolEnabled = true;
     } else {
-      var params = paramsParse(window.location.search);
-      if (urlParam in params && params[urlParam] === "1") {
+      if (urlParams.get(urlParam) === "1") {
         poolEnabled = true;
       }
     }
@@ -312,9 +327,7 @@ async function initTrackingPool({
     // once the service is back up. If it is the first call and the interval has never
     // been set, the service wouldn't retry unless initTrackingPool was called again.
     var msg = "pool: error getting number: " + JSON.stringify(e);
-    if (window.Rollbar) {
-      window.Rollbar.warning(msg);
-    }
+    rbWarning(msg);
     console.warn(msg);
     var errorRes = { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
     if (callback) {
@@ -331,7 +344,15 @@ async function initTrackingPool({
     if (renew) {
       dbg("pool: setting up renewal");
       resp.interval = setInterval(
-        function () { initTrackingPool({ poolId, overlayElements, apiUrl, urlParam, renew: false }); },
+        function () {
+          try {
+            initTrackingPool({ poolId, overlayElements, apiUrl, urlParam, renew: false });
+          } catch (e) {
+            var msg = "pool: error on interval call: " + JSON.stringify(e);
+            rbWarning(msg)
+            console.warn(msg);
+          }
+        },
         renewalInterval
       );
     }

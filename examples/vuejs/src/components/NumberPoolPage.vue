@@ -19,6 +19,19 @@
       >Call Now</a
     >
     <br />
+    <a
+      data-cta-attr="phone"
+      href="tel:+19991231234"
+      class="button cta button-w-icon hero-btn phone w-inline-block"
+      ><img
+        src="https://assets.website-files.com/62ade83a1a672b0b0eafa33d/62b55349ae2b454b71f603bc_phone.svg"
+        loading="lazy"
+        alt=""
+        class="btn-icon hero-btn"
+      />
+      <div class="text-block-3">999-123-1234</div></a
+    >
+    <br />
     <span data-cta-attr="phone" class="button cta">999-123-1234</span>
     <br />
     <span data-cta-attr="phone" class="button cta">Call 999-123-1234 text</span>
@@ -100,3 +113,54 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.btn-icon.hero-btn {
+  margin-right: 10px;
+}
+.btn-icon {
+  width: 30px;
+  height: 30px;
+  margin-right: 20px;
+  -webkit-filter: invert(100%);
+  filter: invert(100%);
+}
+img {
+  border: 0;
+  vertical-align: middle;
+  display: inline-block;
+  max-width: 100%;
+}
+.button-w-icon {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  margin-bottom: 16px;
+  padding: 24px 16px;
+  -webkit-box-pack: center;
+  -webkit-justify-content: center;
+  -ms-flex-pack: center;
+  justify-content: center;
+  -webkit-box-align: center;
+  -webkit-align-items: center;
+  -ms-flex-align: center;
+  align-items: center;
+  border: 1.5px #1f3584;
+  border-radius: 8px;
+  background-color: #1f3584;
+  -webkit-transition: border-color 0.3s, color 0.3s, background-color 0.3s,
+    -webkit-transform 0.3s;
+  transition: transform 0.3s, border-color 0.3s, color 0.3s,
+    background-color 0.3s, -webkit-transform 0.3s;
+  color: #fff;
+  line-height: 20px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.w-inline-block {
+  max-width: 200px;
+}
+</style>

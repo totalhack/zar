@@ -2,12 +2,24 @@
 
 import { get, set, remove, undef } from '@analytics/global-storage-utils';
 
-var urlParams = new URLSearchParams(window.location.search);
+export var urlParams = new URLSearchParams(window.location.search);
 var DEBUG = urlParams.get('zdbg');
 
 export function dbg() {
   if (DEBUG != 1) return;
   console.debug(...arguments);
+}
+
+export function rbError(msg) {
+  if (window.Rollbar) {
+    window.Rollbar.error(msg);
+  }
+}
+
+export function rbWarning(msg) {
+  if (window.Rollbar) {
+    window.Rollbar.warning(msg);
+  }
 }
 
 var supportsSessionStorage = hasSessionStorage();
@@ -76,14 +88,6 @@ export function uuid() {
 
 var inBrowser = typeof document !== 'undefined';
 
-function decode(s) {
-  try {
-    return decodeURIComponent(s.replace(/\+/g, ' '));
-  } catch (e) {
-    return null;
-  }
-}
-
 export function hasAdBlock() {
   if (!inBrowser) return false;
   // Create fake ad
@@ -113,57 +117,6 @@ export function hasAdBlock() {
     // swallow errors
   }
   return false;
-}
-
-function getSearchString(url) {
-  if (url) {
-    var p = url.match(/\?(.*)/);
-    return (p && p[1]) ? p[1].split('#')[0] : '';
-  }
-  return inBrowser && window.location.search.substring(1);
-}
-
-export function paramsParse(url) {
-  return getParamsAsObject(getSearchString(url));
-}
-
-function getParamsAsObject(query) {
-  var params = {};
-  var temp;
-  var re = /([^&=]+)=?([^&]*)/g;
-
-  // eslint-disable-next-line
-  while (temp = re.exec(query)) {
-    var k = decode(temp[1]);
-    var v = decode(temp[2]);
-    if (k.substring(k.length - 2) === '[]') {
-      k = k.substring(0, k.length - 2);
-      (params[k] || (params[k] = [])).push(v);
-    } else {
-      params[k] = (v === '') ? true : v;
-    }
-  }
-
-  for (var prop in params) {
-    var arr = prop.split('[');
-    if (arr.length > 1) {
-      assign(params, arr.map(function (x) { return x.replace(/[?[\]\\ ]/g, ''); }), params[prop]);
-      delete params[prop];
-    }
-  }
-  return params;
-}
-
-function assign(obj, keyPath, value) {
-  var lastKeyIndex = keyPath.length - 1;
-  for (var i = 0; i < lastKeyIndex; ++i) {
-    var key = keyPath[i];
-    if (!(key in obj)) {
-      obj[key] = {};
-    }
-    obj = obj[key];
-  }
-  obj[keyPath[lastKeyIndex]] = value;
 }
 
 function makeRequest({ method, url, data, json = true }) {
