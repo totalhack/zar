@@ -36,6 +36,10 @@ def init_number_pool():
         pool_api.init_pools()
     except NumberPoolUnavailable as e:
         logger.warn(str(e))
+    except Exception as e:
+        if not "doesn't exist" in str(e):
+            raise
+        logger.warning("Table(s) don't exist!")
 
 
 def main() -> None:
