@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.0.24",
+  "version": "0.1.0",
   "description": "Zillion Analytics Recorder",
   "publishConfig": {
     "access": "public"
@@ -41,7 +41,6 @@
     "patchpub": "vite build && npm version patch --force --commit-hooks false && npm publish"
   },
   "dependencies": {
-    "@analytics/global-storage-utils": "0.1.2",
     "@analytics/google-tag-manager": "^0.5.2",
     "analytics": "0.7.18"
   },

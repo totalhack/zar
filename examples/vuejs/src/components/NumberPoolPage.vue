@@ -2,10 +2,10 @@
   <div class="content">
     <h1>Number Pool</h1>
     <pre>{{ JSON.stringify(storage, null, 2) }}</pre>
-    <button v-on:click="initPool">Init Pool</button>
     <button v-on:click="overlayPhoneNumber">Static Overlay</button>
     <button v-on:click="revertOverlay">Revert Overlay</button>
-    <button v-on:click="removePoolSession">Remove Session</button>
+    <button v-on:click="clearPoolIntervals">Clear Intervals</button>
+
     <br />
     <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"
       ><span>999-123-1234</span></a
@@ -49,7 +49,6 @@ export default {
   },
   data: function () {
     return {
-      poolInterval: null,
       ctas: null,
       storage: null
     };
@@ -57,14 +56,6 @@ export default {
   methods: {
     getCTAs: function () {
       return document.querySelectorAll('.cta[data-cta-attr="phone"]');
-    },
-    initPool: function () {
-      console.log("Initiliazing pool:", this.$props.poolId);
-      this.$analytics.plugins.zar.initTrackingPool({
-        poolId: this.$props.poolId,
-        overlayElements: this.ctas,
-        renew: false
-      });
     },
     overlayPhoneNumber: function () {
       this.$analytics.plugins.zar.overlayPhoneNumber(
@@ -77,39 +68,25 @@ export default {
     revertOverlay: function () {
       this.$analytics.plugins.zar.revertOverlayNumbers({ overlayElements: this.ctas });
     },
-    removePoolSession: function () {
-      this.$analytics.plugins.zar.removePoolSession({ overlayElements: this.ctas });
+    clearPoolInterval: function () {
+      console.log('clear interval', this.$props.poolId)
+      this.$analytics.plugins.zar.clearPoolInterval({ poolId: this.$props.poolId });
+    },
+    clearPoolIntervals: function () {
+      console.log('clear intervals')
+      this.$analytics.plugins.zar.clearPoolIntervals()
     }
   },
   mounted: async function () {
+    this.window.zarPoolId = this.$props.poolId;
+    console.log("Initiliazing pool:", this.$props.poolId);
     this.storage = this.$analytics.plugins.zar.getStorage();
     this.ctas = this.getCTAs();
-    console.log("Initiliazing pool:", this.$props.poolId);
-    const self = this;
-    const resp = await this.$analytics.plugins.zar.initTrackingPool({
-      poolId: this.$props.poolId,
-      overlayElements: this.ctas,
-      renew: true,
-      renewalInterval: 10 * 1000,
-      callback: function (result) {
-        self.$analytics.track('number_impressions', { numbers: self.$analytics.plugins.zar.extractPhoneNumbers({ elems: self.ctas }) });
-      }
-    });
-    console.log(resp);
-    if (resp) {
-      this.poolInterval = resp.interval;
-    }
-    // Storage may change if server-side cookies override SID/CID
-    setTimeout(function () {
-      self.storage = self.$analytics.plugins.zar.getStorage();
-    }, 1000);
   },
   beforeDestroy() {
     this.revertOverlay();
-    if (this.poolInterval) {
-      console.log("Clearing interval", this.poolInterval);
-      clearInterval(this.poolInterval);
-    }
+    this.clearPoolInterval();
+    this.window.zarPoolId = null;
   },
 };
 </script>

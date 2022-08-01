@@ -1,8 +1,6 @@
 from typing import Generator
-from tlbx import json, pp
 
-from app import app
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, engine
 
 
 def get_db() -> Generator:
@@ -11,3 +9,11 @@ def get_db() -> Generator:
         yield db
     finally:
         db.close()
+
+
+def get_conn() -> Generator:
+    try:
+        conn = engine.connect()
+        yield conn
+    finally:
+        conn.close()

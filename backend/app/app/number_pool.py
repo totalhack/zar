@@ -22,11 +22,17 @@ from app.db.session import engine
 from app.schemas.zar import NumberPoolCacheValue
 
 
+MINUTES = 60
+HOURS = 60 * MINUTES
+DAYS = 24 * HOURS
 NUMBER_POOL_CONNECT_TRIES = 5
 # TODO read these from pool configs
-NUMBER_POOL_CACHE_EXPIRATION = 2 * 60
-NUMBER_POOL_MAX_RENEWAL_AGE = 48 * 60 * 60
-NUMBER_POOL_ROUTE_CACHE_EXPIRATION = 7 * 24 * 60 * 60
+# If number hasn't been renewed in this time, mark expired (eligible to be taken)
+NUMBER_POOL_CACHE_EXPIRATION = 2 * MINUTES
+# Numbers can get renewed for this amount of time max
+NUMBER_POOL_MAX_RENEWAL_AGE = 72 * HOURS
+# How long we keep call_from -> call_to route contexts cached
+NUMBER_POOL_ROUTE_CACHE_EXPIRATION = 14 * DAYS
 
 LOCK_WAIT_TIMEOUT = 5
 LOCK_HOLD_TIMEOUT = 5
@@ -69,6 +75,7 @@ class NumberPoolResponseMessages(metaclass=ClassValueContainsMeta):
     UNAVAILABLE = "pool unavailable"
     EMPTY = "pool empty"
     NO_SID = "no session ID"
+    EXPIRED = "expired"
     NOT_FOUND = "not found"
     MAX_RENEWAL = "maximum renewal exceeded"
     INTERNAL_ERROR = "internal error"
@@ -247,6 +254,8 @@ class NumberPoolAPI:
         number = None
         from_sid = False
         request_sid = self._get_session_id(pool_id, request_context)
+
+        dbg(f"{request_sid}: pool_id: {pool_id}, target number {target_number}")
 
         try:
             with self._get_pool_lock(pool_id):

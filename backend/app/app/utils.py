@@ -1,9 +1,37 @@
 import random
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote, unquote
 import uuid
 
-from tlbx import pp, info, st
+from tlbx import pp, st, json, raiseifnot
+
+from app.core.config import settings
+from app.core.logging import dbg, info, warn, error
+
+
+if settings.ROLLBAR_ENABLED:
+    print("Initializing Rollbar")
+    import rollbar
+
+
+def rb_msg(msg, level):
+    if settings.ROLLBAR_ENABLED:
+        if not isinstance(msg, str):
+            try:
+                msg = json.dumps(msg)
+            except:
+                pass
+        rollbar.report_message(msg, level)
+
+
+def rb_warning(msg):
+    warn(msg)
+    rb_msg(msg, "warning")
+
+
+def rb_error(msg):
+    error(msg)
+    rb_msg(msg, "error")
 
 
 def print_request(headers, body):
@@ -47,40 +75,87 @@ def create_vid():
     )
 
 
-def create_sid():
+def create_zar_id():
     return str(uuid.uuid4())
 
 
-def create_cid():
-    return str(uuid.uuid4())
+def get_orig_referrer(headers):
+    # If the front end passes one sourced from document.referrer we use it
+    return (
+        (headers or {}).get("document_referrer", "") or headers.get("referer", "") or ""
+    )
+
+
+def create_vid_dict(id=None, t=None, headers=None):
+    origReferrer = get_orig_referrer(headers)
+    t = t or int(time.time_ns() // 1e6)
+    return dict(
+        id=id or create_vid(), isNew=True, visits=1, origReferrer=origReferrer, t=t
+    )
+
+
+def create_id_dict(id=None, t=None, headers=None):
+    origReferrer = get_orig_referrer(headers)
+    t = t or int(time.time_ns() // 1e6)
+    return dict(
+        id=id or create_zar_id(), isNew=True, visits=1, origReferrer=origReferrer, t=t
+    )
 
 
 def create_zar_dict():
     """Server-side ID generation logic ~matches client side. Currently used for noscript"""
     t = int(time.time_ns() // 1e6)
     return dict(
-        cid=dict(id=create_cid(), isNew=True, visits=1, origReferrer="", t=t),
-        sid=dict(id=create_sid(), isNew=True, visits=1, origReferrer="", t=t),
-        vid=dict(id=create_vid(), isNew=True, visits=1, origReferrer="", t=t),
+        cid=create_id_dict(t=t),
+        sid=create_id_dict(t=t),
+        vid=create_vid_dict(t=t),
     )
 
 
-def get_zar_ids(zar, cookie_sid=None, cookie_cid=None):
-    vid_dict = zar.get("vid", {})
-    sid_dict = zar.get("sid", {})
-    cid_dict = zar.get("cid", {})
-    vid = vid_dict.get("id", None) if vid_dict else None
-    sid = sid_dict.get("id", None) if sid_dict else None
-    cid = cid_dict.get("id", None) if cid_dict else None
-    if cookie_sid and cookie_sid != sid:
-        sid = cookie_sid
-        sid_dict["id"] = sid
-        sid_dict["cookie_mismatch"] = True
-    if cookie_cid and cookie_cid != cid:
-        cid = cookie_cid
-        cid_dict["id"] = cid
-        cid_dict["cookie_mismatch"] = True
+def get_zar_ids(zar):
+    vid = zar.get("vid", {}).get("id", None) or None
+    sid = zar.get("sid", {}).get("id", None) or None
+    cid = zar.get("cid", {}).get("id", None) or None
     return vid, sid, cid
+
+
+def handle_zar_id_cookie(zar, cookie, key, headers, t=None):
+    raiseifnot(cookie, f"Expected cookie value, got: {cookie}")
+
+    # We moved to JSON format, but need to handle old case too
+    if cookie.startswith("{"):
+        zar[key] = json.loads(cookie)
+    else:
+        if key in zar and zar[key].get("id", None) != cookie:
+            zar[key]["id"] = cookie
+            zar[key]["cookie_mismatch"] = True
+        else:
+            zar[key] = create_id_dict(id=cookie, t=t, headers=headers)
+    return zar
+
+
+def get_zar_dict(zar, headers, sid_cookie=None, cid_cookie=None, create=True):
+    zar = zar or {}
+    t = int(time.time_ns() // 1e6)
+
+    if create and "vid" not in zar:
+        zar["vid"] = create_vid_dict(t=t, headers=headers)
+
+    if sid_cookie:
+        handle_zar_id_cookie(zar, sid_cookie, "sid", headers, t=t)
+    elif create and "sid" not in zar:
+        zar["sid"] = create_id_dict(t=t, headers=headers)
+
+    if cid_cookie:
+        handle_zar_id_cookie(zar, cid_cookie, "cid", headers, t=t)
+    elif create and "cid" not in zar:
+        zar["cid"] = create_id_dict(t=t, headers=headers)
+
+    return zar
+
+
+def unquote_cookies(*args):
+    return [unquote(cookie) if cookie else None for cookie in args]
 
 
 def zar_cookie_params(key, value, headers, **kwargs):
@@ -98,12 +173,12 @@ def zar_cookie_params(key, value, headers, **kwargs):
 
     params = dict(
         key=key,
-        value=value,
+        value=quote(value),  # URL Encode
         samesite="none",
         httponly=True,
-        secure=True,
+        secure=True if domain != "testserver" else False,
         path="/",
-        domain=domain,
+        domain=domain if domain != "testserver" else None,
     )
     params.update(kwargs)
     if params["max_age"]:

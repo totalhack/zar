@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     NUMBER_POOL_ENABLED: bool = False
     NUMBER_POOL_KEY: str
 
+    ALLOW_BOTS: bool = False
+
     class Config:
         case_sensitive = True
 

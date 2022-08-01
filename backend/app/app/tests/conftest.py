@@ -1,10 +1,8 @@
-from typing import Dict, Generator
+from typing import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.db.session import SessionLocal
 from app.main import app
 
@@ -14,8 +12,7 @@ def db() -> Generator:
     yield SessionLocal()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def client() -> Generator:
     with TestClient(app) as c:
         yield c
-

@@ -28,7 +28,16 @@ const analytics = init({
       }
     ]
   },
-  apiUrl: 'http://localhost/api/v1'
+  apiUrl: 'http://localhost/api/v1',
+  poolConfig: {
+    // poolId: 1, // Setting global pool ID is optional
+    // poolId: function () { return 1 },
+    poolId: function () { return window.zarPoolId },
+    overlayQuerySelector: '.cta[data-cta-attr="phone"]',
+    renewalInterval: 10 * 1000,
+    initCallback: function (x) { console.log('init callback!', x) },
+    contextCallback: function () { console.log('context callback!') }
+  }
 });
 
 analytics.on('ready', () => {
@@ -36,6 +45,7 @@ analytics.on('ready', () => {
 });
 
 Vue.prototype.$analytics = analytics;
+Vue.prototype.window = window;
 
 router.beforeEach(updatePageTags);
 

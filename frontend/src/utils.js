@@ -1,26 +1,43 @@
-// Much in here is copied from analytics-utils to keep bundle size down
-
-import { get, set, remove, undef } from '@analytics/global-storage-utils';
-
 export var urlParams = new URLSearchParams(window.location.search);
 var DEBUG = urlParams.get('zdbg');
+var zarGlobal = {};
+const undef = 'undefined';
 
 export function dbg() {
   if (DEBUG != 1) return;
   console.debug(...arguments);
 }
 
-export function rbError(msg) {
-  if (window.Rollbar) {
-    window.Rollbar.error(msg);
-  }
-}
-
-export function rbWarning(msg) {
+export function warning(msg) {
+  console.warn(msg)
   if (window.Rollbar) {
     window.Rollbar.warning(msg);
   }
 }
+
+export function isFunc(value) {
+  return value && (Object.prototype.toString.call(value) === "[object Function]" || "function" === typeof value || value instanceof Function);
+}
+
+export function isBot() {
+  var ua = navigator.userAgent || ''
+  var bots = new RegExp([
+    /bot/, /spider/, /crawl/, /mediapartners/, /Google-Read-Aloud/, /semrush/
+  ].map((r) => r.source).join("|"), "i")
+  return bots.test(ua)
+}
+
+export function afterDOMContentLoaded(func) {
+  if (document.readyState === "complete"
+    || document.readyState === "loaded"
+    || document.readyState === "interactive") {
+    func()
+  } else {
+    window.addEventListener('DOMContentLoaded', func);
+  }
+}
+
+// Copied from analytics-utils to keep bundle size down
 
 var supportsSessionStorage = hasSessionStorage();
 
@@ -41,7 +58,7 @@ function hasSessionStorage() {
 export function getSessionStorage(key) {
   // Get from SS if supported, fall back to global
   var value;
-  var globalValue = get(key) || undefined;
+  var globalValue = zarGlobal[key];
   if (supportsSessionStorage) {
     value = sessionStorage.getItem(key);
     if ((!value) && globalValue) {
@@ -61,7 +78,7 @@ export function setSessionStorage(key, value) {
   if (supportsSessionStorage) {
     sessionStorage.setItem(key, value_str);
   }
-  set(key, value_str);
+  zarGlobal[key] = value_str;
 }
 
 export function removeSessionStorage(key) {
@@ -69,27 +86,10 @@ export function removeSessionStorage(key) {
   if (supportsSessionStorage) {
     sessionStorage.removeItem(key);
   }
-  remove(key);
+  delete zarGlobal[key];
 }
-
-/* ref: http://bit.ly/2daP79j */
-var lut = []; for (var i = 0; i < 256; i++) { lut[i] = (i < 16 ? '0' : '') + (i).toString(16); }
-
-export function uuid() {
-  var d0 = Math.random() * 0x100000000 >>> 0;
-  var d1 = Math.random() * 0x100000000 >>> 0;
-  var d2 = Math.random() * 0x100000000 >>> 0;
-  var d3 = Math.random() * 0x100000000 >>> 0;
-  return lut[d0 & 0xff] + lut[d0 >> 8 & 0xff] + lut[d0 >> 16 & 0xff] + lut[d0 >> 24 & 0xff] + '-' +
-    lut[d1 & 0xff] + lut[d1 >> 8 & 0xff] + '-' + lut[d1 >> 16 & 0x0f | 0x40] + lut[d1 >> 24 & 0xff] + '-' +
-    lut[d2 & 0x3f | 0x80] + lut[d2 >> 8 & 0xff] + '-' + lut[d2 >> 16 & 0xff] + lut[d2 >> 24 & 0xff] +
-    lut[d3 & 0xff] + lut[d3 >> 8 & 0xff] + lut[d3 >> 16 & 0xff] + lut[d3 >> 24 & 0xff];
-}
-
-var inBrowser = typeof document !== 'undefined';
 
 export function hasAdBlock() {
-  if (!inBrowser) return false;
   // Create fake ad
   var fakeAd = document.createElement('div');
   fakeAd.innerHTML = '&nbsp;';
@@ -173,11 +173,13 @@ async function postBeacon({ url, data }) {
     typeof window.navigator.sendBeacon === "function" &&
     typeof window.Blob === "function") {
     try {
-      if (window.navigator.sendBeacon(url, JSON.stringify(data))) {
+      const blob = new Blob([JSON.stringify(data)], { type: 'text/plain; charset=UTF-8' });
+      if (window.navigator.sendBeacon(url, blob)) {
         return true;
       }
       return false;
     } catch (e) {
+      warning("postBeacon:", e)
       return false;
     }
   }

@@ -1,5 +1,4 @@
 import { Analytics } from 'analytics';
-import { getItem, setItem, removeItem, ALL } from '@analytics/storage-utils';
 import googleTagManager from '@analytics/google-tag-manager';
 
 import { googleAnalytics4 } from './googleAnalytics4';
@@ -8,39 +7,26 @@ import {
   getSessionStorage,
   setSessionStorage,
   removeSessionStorage,
-  uuid,
   hasAdBlock,
-  urlParams,
+  isBot,
   httpGet,
   httpPost,
-  rbWarning
+  warning,
+  afterDOMContentLoaded,
+  isFunc
 } from './utils';
 
-var CID_KEY = '__zar_cid';
-var SID_KEY = '__zar_sid';
 var VID_KEY = '__zar_vid';
-var NUMBER_POOL_KEY = '__zar_pool';
 var NUMBER_POOL_SUCCESS = 'success';
 var NUMBER_POOL_ERROR = 'error';
 var NUMBER_POOL_RENEWAL_TIME_MS = 30 * 1000;
-var POOL_DEFAULT_URL_FLAG = 'pl';
-var DAY_TTL = 1000 * 60 * 60 * 24; // In milliseconds
-// Pool session data is in localStorage but we don't want the pool flag to
-// stay set forever, even though the backend controls max renewal time.
-var POOL_STORAGE_TTL = DAY_TTL * 7;
+var getNumberFailureCount = 0
+var MAX_GET_NUMBER_FAILURES = 3
+var poolIntervals = {}
 
 // Tracks original phone numbers that have been replaced so
 // we can revert if necessary.
-// eslint-disable-next-line
 var numberOverlayMap = new Map();
-
-function generateClientId() {
-  return uuid();
-}
-
-function generateSessionId() {
-  return uuid();
-}
 
 function generateVisitId() {
   return Date.now().toString(36) + '.' + Math.random().toString(36).substring(2);
@@ -56,7 +42,7 @@ function initId(key, generator, getter, setter) {
     id = generator();
     origReferrer = document.referrer;
     isNew = true;
-    dbg('Generated ID for', key, '-', id);
+    dbg('new ID for', key, '-', id);
   } else {
     id = idObj.id;
     origReferrer = idObj.origReferrer;
@@ -67,11 +53,9 @@ function initId(key, generator, getter, setter) {
   return result;
 }
 
-function initIds() {
+function initIDs() {
   var vidResult = initId(VID_KEY, generateVisitId, getSessionStorage, setSessionStorage);
-  var sidResult = initId(SID_KEY, generateSessionId, getSessionStorage, setSessionStorage);
-  var cidResult = initId(CID_KEY, generateClientId, getSessionStorage, setSessionStorage);
-  return { cid: cidResult.id, sid: sidResult.id, vid: vidResult.id };
+  return { vid: vidResult };
 }
 
 function getDefaultApiUrl() {
@@ -89,60 +73,22 @@ function getID(key) {
 
 function getStorage() {
   return {
-    cid: getIDObj(CID_KEY),
-    sid: getIDObj(SID_KEY),
     vid: getIDObj(VID_KEY)
   };
 }
 
-function getIds() {
+function getIDs() {
   return {
-    cid: getID(CID_KEY),
-    sid: getID(SID_KEY),
     vid: getID(VID_KEY)
   };
-}
-
-function updateID(key, val) {
-  var obj = getIDObj(key);
-  if (!obj) {
-    console.warn("could not update " + key);
-    return;
-  }
-  obj.id = val;
-  setSessionStorage(key, obj);
 }
 
 function removeID(key) {
   removeSessionStorage(key);
 }
 
-function removeIds() {
+function removeIDs() {
   removeID(VID_KEY);
-  removeID(SID_KEY);
-  removeID(CID_KEY);
-}
-
-async function getPoolNumber({ poolId, apiUrl, number = null, context = null }) {
-  var payload = {
-    pool_id: poolId,
-    number: number,
-    context: context,
-    properties: {
-      zar: getStorage()
-    }
-  };
-  var resp = await httpPost({ url: `${apiUrl}/number_pool`, data: payload });
-  return resp;
-}
-
-async function getPoolStats({ apiUrl, key = null, with_contexts = false }) {
-  var params = {
-    key,
-    with_contexts
-  };
-  var resp = await httpGet({ url: `${apiUrl}/number_pool_stats`, params: params });
-  return resp;
 }
 
 function extractPhoneNumber({ elem }) {
@@ -174,7 +120,7 @@ function overlayPhoneNumber({ elems, number }) {
 
   for (var i = 0; i < elems.length; i++) {
     if (numberOverlayMap.has(elems[i])) {
-      dbg("pool: skipping element already in overlay map:", elems[i]);
+      dbg("element already in overlay map:", elems[i]);
       continue;
     }
 
@@ -183,10 +129,10 @@ function overlayPhoneNumber({ elems, number }) {
     if (!origNum) {
       origNum = elemNum;
     } else if ((elemNum.number && origNum.number) && (origNum.number !== elemNum.number)) {
-      console.warn('pool: overlaying multiple phone numbers with a single number!', origNum.number, elemNum.number);
+      warning('overlaying multiple numbers with a single number', origNum.number, elemNum.number);
     }
 
-    dbg("pool: overlaying number", overlayNum, "on", elems[i]);
+    dbg("overlaying", overlayNum, "on", elems[i]);
 
     // Store the original values
     numberOverlayMap.set(elems[i], elemNum);
@@ -214,7 +160,7 @@ function overlayPhoneNumber({ elems, number }) {
         elems[i].appendChild(document.createTextNode(overlayNum));
       }
     } else {
-      dbg("pool: no number text found on", elems[i]);
+      dbg("no number text found:", elems[i]);
     }
   }
 }
@@ -226,184 +172,195 @@ function revertOverlayNumbers({ elems }) {
       var origElemData = numberOverlayMap.get(elems[i]);
       dbg("orig:", origElemData);
       var origHTML = origElemData.html;
-      dbg("pool: reverting", currentHTML, "to", origHTML);
+      dbg("reverting", currentHTML, "to", origHTML);
       elems[i].innerHTML = origHTML;
       if (origElemData.href) {
         elems[i].href = origElemData.href;
       }
       numberOverlayMap.delete(elems[i]);
     } else {
-      dbg("pool: element not in map:", elems[i]);
+      dbg("element not in map:", elems[i]);
     }
   }
 }
 
-function removePoolSession({ overlayElements }) {
-  removeItem(NUMBER_POOL_KEY, ALL);
-  revertOverlayNumbers({ elems: overlayElements });
+function clearPoolInterval(poolId) {
+  clearInterval(poolIntervals[poolId]);
+  delete poolIntervals[poolId]
 }
 
-function clearPoolIntervals(poolData) {
-  if (!poolData || !poolData.poolNumbers) {
-    return;
-  }
-  for (var poolId in poolData.poolNumbers) {
-    clearInterval(poolData.poolNumbers[poolId].interval);
+function clearPoolIntervals() {
+  for (var poolId in poolIntervals) {
+    clearPoolInterval(poolId)
   }
 }
 
-function poolSessionExpired(obj) {
-  if (obj && obj.t && (obj.t + POOL_STORAGE_TTL < Date.now())) {
-    return true;
-  }
-  return false;
+async function getPoolNumber({ poolId, apiUrl, number = null, context = null }) {
+  var payload = {
+    pool_id: poolId,
+    number: number,
+    context: context,
+    properties: {
+      zar: getStorage()
+    }
+  };
+  var resp = await httpPost({ url: `${apiUrl}/number_pool`, data: payload });
+  return resp;
 }
 
-function getPoolSession() {
-  return getItem(NUMBER_POOL_KEY);
+async function getPoolStats({ apiUrl, key = null, with_contexts = false }) {
+  var params = {
+    key,
+    with_contexts
+  };
+  var resp = await httpGet({ url: `${apiUrl}/number_pool_stats`, params: params });
+  return resp;
 }
 
-async function initTrackingPool({
+async function renewTrackingPool({
   poolId,
+  number,
   overlayElements,
   apiUrl = getDefaultApiUrl(),
-  urlParam = POOL_DEFAULT_URL_FLAG,
-  renew = true,
-  renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS,
-  callback = null
+  contextCallback = null
 } = {}) {
-  var poolEnabled = false;
-  var seshData = getPoolSession();
-  var expired = poolSessionExpired(seshData);
-
-  if (!expired) {
-    if (seshData && seshData.poolEnabled) {
-      poolEnabled = true;
-    } else {
-      if (urlParams.get(urlParam) === "1") {
-        poolEnabled = true;
-      }
-    }
-  } else {
-    clearPoolIntervals(seshData);
-    removePoolSession({ overlayElements });
+  var context = {};
+  if (contextCallback) {
+    context = contextCallback() || {};
   }
 
-  if (!poolEnabled) {
-    dbg('pool: not enabled');
-    if (callback) {
-      callback(null);
-    }
-    return null;
-  }
-
-  var seshNumber = null;
-  var seshInterval = null;
-
-  if (seshData && seshData.poolNumbers && seshData.poolNumbers[poolId]) {
-    var poolResult = seshData.poolNumbers[poolId];
-    seshInterval = poolResult.interval;
-    if (poolResult.status !== NUMBER_POOL_SUCCESS) {
-      // Prevents previously failed sessions from trying again
-      dbg('pool: returning cached unsuccessful pool result: ' + JSON.stringify(poolResult));
-      if (callback) {
-        callback(poolResult);
-      }
-      return poolResult;
-    }
-    if (poolResult.number) {
-      seshNumber = poolResult.number;
-      dbg('pool: found session number ' + seshNumber);
-    }
-  }
-
-  var resp = {};
   try {
-    resp = await getPoolNumber({ poolId, apiUrl, number: seshNumber, context: {} });
+    var resp = await getPoolNumber({ poolId, apiUrl, number, context });
   } catch (e) {
-    // We catch and return errors but don't cache the result. It is assumed
-    // this only happens when the number service is down. If this wasn't the first
-    // call with an error, this would allow the retries to just start working again
-    // once the service is back up. If it is the first call and the interval has never
-    // been set, the service wouldn't retry unless initTrackingPool was called again.
-    var msg = "pool: error getting number: " + JSON.stringify(e);
-    rbWarning(msg);
-    console.warn(msg);
-    var errorRes = { status: NUMBER_POOL_ERROR, msg: e.message, interval: seshInterval };
-    if (callback) {
-      callback(errorRes);
+    // We don't clear the pool interval in here -- assumes the service is
+    // down or the error was intermitten, allows retrying
+    var msg = "error getting number: " + JSON.stringify(e);
+    warning(msg);
+    getNumberFailureCount++;
+    if (getNumberFailureCount >= MAX_GET_NUMBER_FAILURES) {
+      warning("max failures, stopping pool")
+      clearPoolIntervals();
+      if (overlayElements) {
+        revertOverlayNumbers({ elems: overlayElements });
+      }
     }
-    return errorRes;
+    return { status: NUMBER_POOL_ERROR, msg }
   }
 
   if (resp.status === NUMBER_POOL_SUCCESS && resp.number) {
     if (overlayElements) {
       overlayPhoneNumber({ elems: overlayElements, number: resp.number });
     }
-
-    if (renew) {
-      dbg("pool: setting up renewal");
-      resp.interval = setInterval(
-        function () {
-          try {
-            initTrackingPool({ poolId, overlayElements, apiUrl, urlParam, renew: false });
-          } catch (e) {
-            var msg = "pool: error on interval call: " + JSON.stringify(e);
-            rbWarning(msg)
-            console.warn(msg);
-          }
-        },
-        renewalInterval
-      );
-    }
   } else {
     if (overlayElements) {
       revertOverlayNumbers({ elems: overlayElements });
     }
-    if (seshInterval) {
-      clearInterval(seshInterval);
+    if (poolIntervals[poolId]) {
+      clearInterval(poolIntervals[poolId])
+      delete poolIntervals[poolId]
     }
-    resp.interval = null;
   }
 
-  if (seshData) {
-    if (seshData.poolNumbers[poolId]) {
-      Object.assign(seshData.poolNumbers[poolId], resp);
-    } else {
-      seshData.poolNumbers[poolId] = resp;
-    }
-    if (renew) {
-      // Assume its the initial call, reset pool session expiration
-      seshData.t = Date.now();
-    }
-  } else {
-    var poolNumbers = {};
-    poolNumbers[poolId] = resp;
-    seshData = {
-      poolEnabled: true,
-      poolNumbers,
-      t: Date.now()
-    };
-  }
-
-  setItem(NUMBER_POOL_KEY, seshData, ALL);
-  dbg('pool: saved session data ' + JSON.stringify(seshData));
-  if (callback) {
-    callback(resp);
-  }
   return resp;
 }
 
-function zar({ apiUrl }) {
+function getPoolId(poolId) {
+  if (isFunc(poolId)) return poolId();
+  return poolId;
+}
+
+async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
+  var msg
+
+  if (!poolConfig || !poolConfig.poolId || !poolConfig.overlayQuerySelector || !apiUrl) {
+    msg = 'missing pool config: ' + JSON.stringify(poolConfig);
+    warning(msg);
+    if (poolConfig.initCallback) {
+      poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
+    }
+    return poolIntervals;
+  }
+
+  var context = {};
+  if (poolConfig.contextCallback) {
+    context = poolConfig.contextCallback() || {};
+  }
+
+  var poolId = getPoolId(poolConfig.poolId)
+  if (!poolId) {
+    msg = 'no pool ID';
+    warning(msg);
+    if (poolConfig.initCallback) {
+      poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
+    }
+    return poolIntervals;
+  }
+
+  if (!poolData) {
+    try {
+      poolData = await getPoolNumber({ poolId, apiUrl, number: null, context });
+    } catch (e) {
+      msg = "error getting number on init: " + JSON.stringify(e);
+      warning(msg)
+      if (poolConfig.initCallback) {
+        poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
+      }
+      return poolIntervals;
+    }
+  }
+
+  if (poolData && poolData.status === NUMBER_POOL_SUCCESS && poolData.number) {
+    afterDOMContentLoaded(function () {
+      var overlayElements = document.querySelectorAll(poolConfig.overlayQuerySelector);
+      if (!overlayElements) {
+        var msg = 'No elems found for:' + poolConfig.overlayQuerySelector
+        warning(msg)
+        if (poolConfig.initCallback) {
+          poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
+        }
+        return
+      }
+
+      overlayPhoneNumber({ elems: overlayElements, number: poolData.number });
+
+      var interval = setInterval(
+        function () {
+          try {
+            renewTrackingPool({
+              poolId: poolData.pool_id,
+              number: poolData.number,
+              overlayElements,
+              apiUrl,
+              contextCallback: poolConfig.contextCallback
+            });
+          } catch (e) {
+            var msg = "error on interval: " + JSON.stringify(e);
+            warning(msg);
+          }
+        },
+        poolConfig.renewalInterval || NUMBER_POOL_RENEWAL_TIME_MS
+      );
+
+      poolIntervals[poolData.pool_id] = interval;
+      if (poolConfig.initCallback) {
+        poolConfig.initCallback(poolData);
+      }
+    });
+  }
+
+  return poolIntervals;
+}
+
+function zar({ apiUrl, poolConfig }) {
   return {
     name: 'zar',
-    config: {
-      apiUrl: apiUrl
-    },
+    config: { apiUrl, poolConfig },
     initialize: function ({ config }) { },
     loaded: function () { return true; },
     pageStart: function ({ payload, config, instance }) {
       payload.properties.zar = getStorage();
+      payload.properties.referrer = document.referrer;
+      payload.properties.is_bot = isBot();
       // Remove redundant values since url has all of this
       if ("hash" in payload.properties) {
         delete payload.properties["hash"];
@@ -414,56 +371,50 @@ function zar({ apiUrl }) {
       if ("search" in payload.properties) {
         delete payload.properties["search"];
       }
-      return payload;
-    },
-    trackStart: function ({ payload, config, instance }) {
-      payload.properties.zar = getStorage();
-      payload.properties.url = window.location.href;
+
+      if (config.poolConfig && config.poolConfig.poolId) {
+        payload.properties.pool_id = getPoolId(config.poolConfig.poolId);
+      }
       return payload;
     },
     page: async function ({ payload, options, instance, config }) {
       dbg('page', payload, options, config);
-      var result = await httpPost({ url: `${config.apiUrl}/page`, data: payload });
-      // We overwrite the session / client ID in case server-side values are different
-      if (result.sid) {
-        updateID(SID_KEY, result.sid);
+      var res = await httpPost({ url: `${config.apiUrl}/page`, data: payload });
+      if (res.pool_data) {
+        initTrackingPool({ poolData: res.pool_data, poolConfig: config.poolConfig, apiUrl: config.apiUrl })
       }
-      if (result.cid) {
-        updateID(CID_KEY, result.cid);
-        instance.setAnonymousId(result.cid);
-      }
+    },
+    trackStart: function ({ payload, config, instance }) {
+      payload.properties.zar = getStorage();
+      payload.properties.url = window.location.href;
+      payload.properties.referrer = document.referrer;
+      return payload;
     },
     track: function ({ payload, options, instance, config }) {
       dbg('track', payload);
       httpPost({ url: `${config.apiUrl}/track`, data: payload, beacon: true });
     },
     reset: function ({ instance }) {
-      removeIds();
+      removeIDs();
     },
     bootstrap: function ({ payload, config, instance }) {
-      var result = initIds();
-      instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
+      initIDs();
     },
     methods: {
       apiUrl() {
         return apiUrl;
       },
-      initIds() {
-        var result = initIds();
-        this.instance.setAnonymousId(result.cid); // Override analytics' anonymous ID with client ID
-        return result;
+      poolConfig() {
+        return poolConfig;
       },
-      getIds() {
-        return getIds();
+      initIDs() {
+        return initIDs();
+      },
+      getIDs() {
+        return getIDs();
       },
       getStorage() {
         return getStorage();
-      },
-      getCID() {
-        return getID(CID_KEY);
-      },
-      getSID() {
-        return getID(SID_KEY);
       },
       getVID() {
         return getID(VID_KEY);
@@ -471,16 +422,25 @@ function zar({ apiUrl }) {
       hasAdBlock() {
         return hasAdBlock();
       },
-      initTrackingPool({ poolId, overlayElements, urlParam = POOL_DEFAULT_URL_FLAG, renew = true, renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS, callback = null }) {
+      isBot() {
+        return isBot();
+      },
+      initTrackingPool({ poolConfig }) {
+        var plugin = this.instance.plugins.zar
         return initTrackingPool({
-          poolId,
-          overlayElements,
-          apiUrl: this.instance.plugins.zar.apiUrl(),
-          urlParam,
-          renew,
-          renewalInterval,
-          callback
+          poolData: null,
+          poolConfig: Object.assign(plugin.poolConfig(), poolConfig || {}),
+          apiUrl: plugin.apiUrl()
         });
+      },
+      getPoolIntervals() {
+        return poolIntervals
+      },
+      clearPoolInterval({ poolId }) {
+        clearPoolInterval(poolId)
+      },
+      clearPoolIntervals() {
+        clearPoolIntervals()
       },
       extractPhoneNumbers({ elems }) {
         var res = [];
@@ -496,9 +456,6 @@ function zar({ apiUrl }) {
       revertOverlayNumbers({ overlayElements }) {
         revertOverlayNumbers({ elems: overlayElements });
       },
-      removePoolSession({ overlayElements }) {
-        removePoolSession({ overlayElements });
-      },
       getPoolStats({ key = null, with_contexts = false }) {
         return getPoolStats({ apiUrl: this.instance.plugins.zar.apiUrl(), key, with_contexts });
       }
@@ -506,13 +463,13 @@ function zar({ apiUrl }) {
   };
 }
 
-function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null }) {
+function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null, poolConfig = null }) {
   // Opinionated init of Analytics
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
   }
 
-  var plugins = [zar({ apiUrl })];
+  var plugins = [zar({ apiUrl, poolConfig })];
   if (ga4Config) {
     plugins.push(googleAnalytics4(ga4Config));
   }
