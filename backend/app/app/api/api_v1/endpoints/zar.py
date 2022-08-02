@@ -1,3 +1,7 @@
+"""
+TODO Async db connections: https://github.com/encode/databases
+TODO Check for bots before deps.get_conn
+"""
 import time
 from typing import Generator, Dict, Any, Optional
 
@@ -5,9 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy import insert
-from sqlalchemy.inspection import inspect
 from starlette.status import HTTP_204_NO_CONTENT
-from tlbx import st, json, dbg, info, warn, error
+from tlbx import st, json, dbg, info, warn
 from urllib.parse import urlparse, parse_qs
 
 from app import models
@@ -19,7 +22,6 @@ from app.schemas.zar import (
 )
 from app.api import deps
 from app.core.config import settings
-from app.db.session import engine
 from app.number_pool import (
     NumberPoolAPI,
     NumberPoolResponseStatus,
@@ -200,7 +202,7 @@ def page(
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
     _zar_pool: Optional[str] = Cookie(None),
-    db: Generator = Depends(deps.get_db),
+    conn: Generator = Depends(deps.get_conn),
 ) -> Dict[str, Any]:
     start = time.time()
     body = dict(body)
@@ -230,7 +232,7 @@ def page(
     except Exception as e:
         rb_error(f"handle_pool_request failed: {str(e)}")
 
-    page_obj = models.Page(
+    stmt = insert(models.Page).values(
         vid=vid,
         sid=sid,
         cid=cid,
@@ -241,10 +243,8 @@ def page(
         referer=headers["referer"],
         properties=json.dumps(body["properties"]),
     )
-    db.add(page_obj)
-    db.commit()
-    pk = inspect(page_obj).identity
-    pk = pk[0] if pk else None
+    res = conn.execute(stmt)
+    pk = res.inserted_primary_key[0] if res.inserted_primary_key else None
 
     response.set_cookie(
         **zar_cookie_params(
@@ -262,29 +262,22 @@ def page(
             max_age=CID_COOKIE_MAX_AGE,
         )
     )
-    info(f"took: {time.time() - start:0.3f}s")
+    dbg(f"took: {time.time() - start:0.3f}s")
     return dict(vid=vid, sid=sid, cid=cid, id=pk, pool_data=pool_data)
 
 
 @router.post("/track", response_model=Dict[str, Any])
-async def track(
+def track(
     request: Request,
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
-    db: Generator = Depends(deps.get_db),
+    conn: Generator = Depends(deps.get_conn),
+    body_data: dict = Depends(deps.get_body_data),
 ):
+    start = time.time()
     text_response = False
-    body_data = None
-    if request.headers["content-type"] == "application/x-www-form-urlencoded":
-        body_data = await request.form()
-    elif request.headers["content-type"] == "application/json":
-        body_data = await request.json()
-    elif "text/plain" in request.headers["content-type"]:
-        body_data = await request.body()
-        body_data = json.loads(body_data)
+    if "text/plain" in request.headers["content-type"]:
         text_response = True
-    else:
-        raise HTTPException(status_code=422, detail="Invalid content")
 
     try:
         body = TrackRequestBody(**body_data)
@@ -315,7 +308,7 @@ async def track(
         # Can get this data from the page/visit info
         del body["properties"]["zar"]
 
-    track_obj = models.Track(
+    stmt = insert(models.Track).values(
         event=body["event"],
         vid=vid,
         sid=sid,
@@ -327,15 +320,15 @@ async def track(
         referer=headers["referer"],
         properties=json.dumps(body["properties"]),
     )
-    db.add(track_obj)
-    db.commit()
-    pk = inspect(track_obj).identity
-    pk = pk[0] if pk else None
+    res = conn.execute(stmt)
 
-    resp = dict(id=pk)
+    dbg(f"took: {time.time() - start:0.3f}s")
     if text_response:
         # Assume it was a beacon call
         return Response(status_code=HTTP_204_NO_CONTENT)
+
+    pk = res.inserted_primary_key[0] if res.inserted_primary_key else None
+    resp = dict(id=pk)
     return JSONResponse(content=resp)
 
 
@@ -344,7 +337,7 @@ def noscript(
     request: Request,
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
-    db: Generator = Depends(deps.get_db),
+    conn: Generator = Depends(deps.get_conn),
 ) -> Dict[str, Any]:
     if settings.DEBUG:
         print_request(request.headers, None)
@@ -359,7 +352,8 @@ def noscript(
     )
 
     vid, sid, cid = get_zar_ids(zar)
-    page_obj = models.Page(
+
+    stmt = insert(models.Page).values(
         vid=vid,
         sid=sid,
         cid=cid,
@@ -370,10 +364,8 @@ def noscript(
         referer=headers["referer"],
         properties=json.dumps(props),
     )
-    db.add(page_obj)
-    db.commit()
-    pk = inspect(page_obj).identity
-    pk = pk[0] if pk else None
+    res = conn.execute(stmt)
+    pk = res.inserted_primary_key[0] if res.inserted_primary_key else None
     return dict(id=pk)
 
 
@@ -444,7 +436,11 @@ def number_pool(
 
 
 @router.post("/track_call", response_model=Dict[str, Any])
-def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
+def track_call(
+    body: TrackCallRequestBody,
+    request: Request,
+    conn: Generator = Depends(deps.get_conn),
+) -> Dict[str, Any]:
     body = dict(body)
     key = body.get("key", None)
     if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
@@ -511,9 +507,9 @@ def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
     )
 
     try:
-        engine.execute(insert_stmt)
+        conn.execute(insert_stmt)
     except Exception as e:
-        error("Failed to save TrackCall record:" + str(e))
+        rb_error(f"Failed to save TrackCall record: {str(e)}")
         return dict(
             status=NumberPoolResponseStatus.ERROR,
             msg=NumberPoolResponseMessages.INTERNAL_ERROR,

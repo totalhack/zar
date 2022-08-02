@@ -34,7 +34,7 @@ services:
       - ROLLBAR_ENV=${ROLLBAR_ENV}
       - ROLLBAR_KEY=${ROLLBAR_KEY}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
-      - DEBUG=true
+      - DEBUG=${DEBUG-true}
     logging:
       driver: json-file
     build:

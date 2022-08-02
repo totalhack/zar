@@ -1,0 +1,4 @@
+-- wrk -c 10 -d 5 -t 5 --latency -s track.lua "http://localhost/api/v1/track"
+wrk.method = "POST"
+wrk.body = '{"type": "track", "event": "event1", "properties": {"attr1": "val1", "attr2": "val2", "url": "http://localhost:8080/one", "referrer": "http://localhost:8080/one", "zar": {"vid": {"id": "kgwevbe3.ryqmjkraheq", "t": 1604071692651, "origReferrer": "http://localhost:8080/one", "isNew": true, "visits": 1}}, "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbf", "category": "All"}, "options": {}, "userId": null, "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbf", "meta": {"timestamp": 1604072961820}}'
+wrk.headers["Content-Type"] = "text/plain"
