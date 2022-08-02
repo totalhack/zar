@@ -1,3 +1,4 @@
 .DS_Store
 .env.local*
 docker-stack.yml
+.npmrc
