@@ -28,7 +28,7 @@ const analytics = init({
       }
     ]
   },
-  apiUrl: 'http://localhost/api/v1',
+  apiUrl: 'http://localhost/api/v2',
   poolConfig: {
     // poolId: 1, // Setting global pool ID is optional
     // poolId: function () { return 1 },

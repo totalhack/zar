@@ -6,7 +6,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app import app
-from app.api.api_v1.api import api_router
+from app.api.api_v1.api import api_router as v1_router
+from app.api.api_v2.api import api_router as v2_router
 from app.core.config import settings
 
 
@@ -46,4 +47,5 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(v1_router, prefix=settings.API_V1_STR)
+app.include_router(v2_router, prefix=settings.API_V2_STR)
