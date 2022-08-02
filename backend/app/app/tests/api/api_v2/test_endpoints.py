@@ -18,7 +18,7 @@ SAMPLE_PAGE_REQUEST = {
         "referrer": "http://localhost:8080/one",
         "zar": {
             "vid": {
-                "id": "kgwevbe3.ryqmjkraheq",
+                "id": "kgwevbe3.ryqmjkrahew",
                 "t": 1604071692651,
                 "origReferrer": "http://localhost:8080/one",
                 "isNew": True,
@@ -28,13 +28,13 @@ SAMPLE_PAGE_REQUEST = {
     },
     "options": {},
     "userId": None,
-    "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbf",
+    "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbg",
     "meta": {"timestamp": 1604071694775},
 }
 
 
 def page(client, req=SAMPLE_PAGE_REQUEST):
-    resp = client.post(f"{settings.API_V1_STR}/page", json=req)
+    resp = client.post(f"{settings.API_V2_STR}/page", json=req)
     assert resp.status_code == 200
     data = resp.json()
     pp(data)
@@ -75,25 +75,25 @@ SAMPLE_TRACK_REQUEST = {
         "referrer": "http://localhost:8080/one",
         "zar": {
             "vid": {
-                "id": "kgwevbe3.ryqmjkraheq",
+                "id": "kgwevbe3.ryqmjkrahew",
                 "t": 1604071692651,
                 "origReferrer": "http://localhost:8080/one",
                 "isNew": True,
                 "visits": 1,
             },
         },
-        "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbf",
+        "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbg",
         "category": "All",
     },
     "options": {},
     "userId": None,
-    "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbf",
+    "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbg",
     "meta": {"timestamp": 1604072961820},
 }
 
 
 def test_endpoint_track(client: TestClient) -> None:
-    resp = client.post(f"{settings.API_V1_STR}/track", json=SAMPLE_TRACK_REQUEST)
+    resp = client.post(f"{settings.API_V2_STR}/track", json=SAMPLE_TRACK_REQUEST)
     assert resp.status_code == 200
     data = resp.json()
     pp(data)
@@ -109,19 +109,19 @@ SAMPLE_NUMBER_POOL_REQUEST = {
         "attr2": "val2",
         "zar": {
             "vid": {
-                "id": "kgwevbe3.ryqmjkraheq",
+                "id": "kgwevbe3.ryqmjkrahew",
                 "t": 1604071692651,
                 "origReferrer": "http://localhost:8080/one",
                 "isNew": True,
                 "visits": 1,
             },
         },
-        "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbf",
+        "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbg",
         "category": "All",
     },
     "options": {},
     "userId": None,
-    "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbf",
+    "anonymousId": "29d7dfba-47ed-4305-ad91-e0625101afbg",
     "meta": {"timestamp": 1604072961820},
 }
 
@@ -129,7 +129,7 @@ SAMPLE_NUMBER_POOL_REQUEST = {
 def test_endpoint_number_pool_init(client: TestClient) -> None:
     resp, data = page(client)  # without pool, just to set cookies
     resp = client.post(
-        f"{settings.API_V1_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+        f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -139,7 +139,7 @@ def test_endpoint_number_pool_init(client: TestClient) -> None:
 
 def test_endpoint_number_pool_no_sid(client: TestClient) -> None:
     resp = client.post(
-        f"{settings.API_V1_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+        f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -160,7 +160,7 @@ def test_endpoint_number_session_expired(client: TestClient) -> None:
 
     req = SAMPLE_NUMBER_POOL_REQUEST.copy()
     req["number"] = data["pool_data"]["number"]
-    resp = client.post(f"{settings.API_V1_STR}/number_pool", json=req)
+    resp = client.post(f"{settings.API_V2_STR}/number_pool", json=req)
     assert resp.status_code == 200
     data = resp.json()
     pp(data)
@@ -177,7 +177,7 @@ SAMPLE_TRACK_CALL_REQUEST = {
 
 def test_endpoint_call_track_error(client: TestClient) -> None:
     resp = client.post(
-        f"{settings.API_V1_STR}/track_call", json=SAMPLE_TRACK_CALL_REQUEST
+        f"{settings.API_V2_STR}/track_call", json=SAMPLE_TRACK_CALL_REQUEST
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -188,14 +188,14 @@ def test_endpoint_call_track_error(client: TestClient) -> None:
 
 def test_endpoint_call_track_success(client: TestClient) -> None:
     resp = client.get(
-        f"{settings.API_V1_STR}/reset_pool",
+        f"{settings.API_V2_STR}/reset_pool",
         params=dict(key="abc", pool_id=1, preserve=False),
     )
     assert resp.status_code == 200
 
     resp, data = page(client)  # without pool, just to set cookies
     resp = client.post(
-        f"{settings.API_V1_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+        f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -207,14 +207,14 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     track_call_req["call_to"] = number
     pp(track_call_req)
 
-    resp = client.post(f"{settings.API_V1_STR}/track_call", json=track_call_req)
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
     assert resp.status_code == 200
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
 
     # route context should come into play on this one
-    resp = client.post(f"{settings.API_V1_STR}/track_call", json=track_call_req)
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
     assert resp.status_code == 200
     data = resp.json()
     pp(data)
