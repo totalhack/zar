@@ -352,6 +352,8 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
 }
 
 function zar({ apiUrl, poolConfig }) {
+  initIDs();
+
   return {
     name: 'zar',
     config: { apiUrl, poolConfig },
@@ -393,12 +395,6 @@ function zar({ apiUrl, poolConfig }) {
     track: function ({ payload, options, instance, config }) {
       dbg('track', payload);
       httpPost({ url: `${config.apiUrl}/track`, data: payload, beacon: true });
-    },
-    reset: function ({ instance }) {
-      removeIDs();
-    },
-    bootstrap: function ({ payload, config, instance }) {
-      initIDs();
     },
     methods: {
       apiUrl() {
