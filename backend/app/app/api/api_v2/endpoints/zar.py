@@ -99,6 +99,7 @@ def get_pool_number(pool_api, pool_id, context, number=None):
             number=None,
             msg=NumberPoolResponseMessages.EMPTY,
         )
+        rb_error(f"pool ID {pool_id} is empty")
     except NumberNotFound as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
@@ -140,7 +141,6 @@ def handle_pool_request(zar, props, cookie, headers, response):
 
     if cookie:
         try:
-            # pool_sesh = json.loads(unquote(cookie))
             pool_sesh = json.loads(cookie)
             use_pool = pool_sesh["enabled"]
         except Exception as e:
