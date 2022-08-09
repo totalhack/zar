@@ -253,6 +253,8 @@ class NumberPoolAPI:
         start = time.time()
         number = None
         from_sid = False
+        key_mismatch = False
+        sid_number_mismatch = False
         request_sid = self._get_session_id(pool_id, request_context)
 
         dbg(f"{request_sid}: pool_id: {pool_id}, target number {target_number}")
@@ -260,15 +262,14 @@ class NumberPoolAPI:
         try:
             with self._get_pool_lock(pool_id):
                 # HACK: ensure we are targeting the session number for renewal if one
-                # exists. I don't like the complications this adds to the logic but want
-                # a way to ensure a single session can't request multiple numbers.
+                # exists. Roughly tries to enforce a single number per session.
                 sid_number = self._get_session_number(pool_id, request_context)
                 if sid_number:
                     if target_number and sid_number != target_number:
-                        # TODO should this be an error instead?
                         warn(
                             f"{request_sid}: Session / Target number mismatch: {sid_number} / {target_number}"
                         )
+                        sid_number_mismatch = True
                     from_sid = True
                     renew = True
                     target_number = sid_number
@@ -293,15 +294,19 @@ class NumberPoolAPI:
                             ctx["request_context"].update(request_context)
                         try:
                             res = self._renew_number(
-                                pool_id, target_number, context=ctx
+                                pool_id, target_number, context=ctx, from_sid=from_sid
                             )
                             if res:
                                 number = target_number
                         except NumberSessionKeyMismatch as e:
-                            # Let it go on to leasing a random number instead
-                            pass
+                            # Can happen if, for example, a user comes back later and their
+                            # number has been leased out to another session. Let it go on to
+                            # leasing a random number instead.
+                            key_mismatch = True
 
-                if (not number) and (not from_sid):
+                if (not number) and (
+                    (not from_sid) or (key_mismatch and not sid_number_mismatch)
+                ):
                     number = self._lease_random_number(pool_id, request_context)
         except LockError as e:
             raise NumberPoolUnavailable(f"Could not acquire pool {pool_id} lock")
@@ -472,7 +477,7 @@ class NumberPoolAPI:
             self._add_session_number(pool_id, sid, number)
         return res
 
-    def _renew_number(self, pool_id, number, context=None):
+    def _renew_number(self, pool_id, number, context=None, from_sid=False):
         """Expected to be called with a number that is 'taken'"""
         dbg(f"Renewing number {pool_id}/{number}")
 
@@ -502,6 +507,9 @@ class NumberPoolAPI:
         res = self._update_taken_number(pool_id, number, context)
         raiseifnot(res, f"Failed to renew number: {pool_id}/{number}")
         self.set_number_context(number, context)
+        if sid and (not from_sid):
+            # Ensure this SID is associated with this number
+            self._add_session_number(pool_id, sid, number)
         return res
 
     def _lease_random_number(self, pool_id, request_context):
