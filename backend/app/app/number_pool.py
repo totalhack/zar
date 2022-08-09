@@ -479,13 +479,13 @@ class NumberPoolAPI:
         curr_context = self.get_number_context(number)
         raiseif(curr_context is None, "Trying to renew inactive number")
         if not context:
-            # No context was provided, so we just renew against the same context
+            warn(f"No context provided, using number {number} context")
             context = curr_context
 
         sid = self._get_session_id(pool_id, context["request_context"])
         curr_sid = self._get_session_id(pool_id, curr_context["request_context"])
         if sid != curr_sid:
-            msg = f"session key mismatch for {pool_id}/{number}, can not renew"
+            msg = f"session key mismatch for {pool_id}/{number} {sid}/{curr_sid}, can not renew"
             warn(msg)
             raise NumberSessionKeyMismatch(msg)
 

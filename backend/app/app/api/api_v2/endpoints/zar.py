@@ -99,7 +99,7 @@ def get_pool_number(pool_api, pool_id, context, number=None):
             number=None,
             msg=NumberPoolResponseMessages.EMPTY,
         )
-        rb_error(f"pool ID {pool_id} is empty")
+        rb_error(f"pool ID {pool_id} is empty: {str(e)}")
     except NumberNotFound as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
