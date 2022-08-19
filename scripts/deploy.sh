@@ -3,13 +3,6 @@
 # Exit in case of error
 set -e
 
-DOMAIN=${DOMAIN?Variable not set} \
-STACK_NAME=${STACK_NAME?Variable not set} \
-TAG=${TAG-latest} \
-DOCKER_IMAGE_BACKEND=${DOCKER_IMAGE_BACKEND?Variable not set} \
-docker-compose \
--f docker-compose.yml \
-config | \
+sh ./scripts/config.sh ${1:-docker-compose.yml} | node ./scripts/repair_compose.mjs | \
 DOCKER_CONTEXT=${DOCKER_CONTEXT?Variable not set} \
 docker stack deploy -c - --with-registry-auth "${STACK_NAME?Variable not set}"
-
