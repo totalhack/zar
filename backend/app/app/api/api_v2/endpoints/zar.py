@@ -30,6 +30,7 @@ from app.number_pool import (
     NumberPoolEmpty,
     NumberNotFound,
     NumberMaxRenewalExceeded,
+    SessionNumberUnavailable,
 )
 from app.utils import (
     print_request,
@@ -80,7 +81,7 @@ def get_pool_number(pool_api, pool_id, context, number=None):
             status=NumberPoolResponseStatus.ERROR,
             pool_id=None,
             number=None,
-            msg=NumberPoolResponseMessages.UNAVAILABLE,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
         warn(res)
         return res
@@ -99,13 +100,21 @@ def get_pool_number(pool_api, pool_id, context, number=None):
             number=None,
             msg=NumberPoolResponseMessages.EMPTY,
         )
-        rb_error(f"pool ID {pool_id} is empty: {str(e)}")
+        rb_error(f"NumberPoolEmpty: pool ID {pool_id}: {str(e)}")
+    except SessionNumberUnavailable as e:
+        res = dict(
+            status=NumberPoolResponseStatus.ERROR,
+            number=None,
+            msg=NumberPoolResponseMessages.NUMBER_UNAVAILABLE,
+        )
+        rb_warning(f"SessionNumberUnavailable: pool ID {pool_id}: {str(e)}")
     except NumberNotFound as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
             msg=NumberPoolResponseMessages.NOT_FOUND,
         )
+        rb_warning(f"NumberNotFound: pool ID {pool_id}: {str(e)}")
     except NumberMaxRenewalExceeded as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
@@ -452,7 +461,7 @@ def track_call(
     if not pool_api:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
-            msg=NumberPoolResponseMessages.UNAVAILABLE,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
         rb_warning(res)
         return res
@@ -526,7 +535,7 @@ def refresh_number_pool_conn(request: Request, key: str = None) -> Dict[str, Any
     if not pool_api:
         return dict(
             status=NumberPoolResponseStatus.ERROR,
-            msg=NumberPoolResponseMessages.UNAVAILABLE,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
     pool_api.refresh_conn()
     return dict(status=NumberPoolResponseStatus.SUCCESS, msg=None)
@@ -540,7 +549,7 @@ def init_number_pools(request: Request, key: str = None) -> Dict[str, Any]:
     if not pool_api:
         return dict(
             status=NumberPoolResponseStatus.ERROR,
-            msg=NumberPoolResponseMessages.UNAVAILABLE,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
     res = pool_api.init_pools()
     return dict(status=NumberPoolResponseStatus.SUCCESS, msg=json.dumps(res))
@@ -556,7 +565,7 @@ def reset_pool(
     if not pool_api:
         return dict(
             status=NumberPoolResponseStatus.ERROR,
-            msg=NumberPoolResponseMessages.UNAVAILABLE,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
     pool_api._reset_pool(pool_id, preserve=preserve)
     return dict(status=NumberPoolResponseStatus.SUCCESS, msg=None)
@@ -572,7 +581,7 @@ def number_pool_stats(
     if not pool_api:
         return dict(
             status=NumberPoolResponseStatus.ERROR,
-            msg=NumberPoolResponseMessages.UNAVAILABLE,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
     return pool_api.get_all_pool_stats(with_contexts=with_contexts)
 

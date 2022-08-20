@@ -48,6 +48,10 @@ class NumberPoolEmpty(Exception):
     pass
 
 
+class SessionNumberUnavailable(Exception):
+    pass
+
+
 class NumberNotFound(Exception):
     pass
 
@@ -72,7 +76,8 @@ class NumberPoolResponseStatus(metaclass=ClassValueContainsMeta):
 
 
 class NumberPoolResponseMessages(metaclass=ClassValueContainsMeta):
-    UNAVAILABLE = "pool unavailable"
+    POOL_UNAVAILABLE = "pool unavailable"
+    NUMBER_UNAVAILABLE = "number unavailable"
     EMPTY = "pool empty"
     NO_SID = "no session ID"
     EXPIRED = "expired"
@@ -314,10 +319,12 @@ class NumberPoolAPI:
         dbg(f"{request_sid}: took {time.time() - start:0.3f}s, number: {number}")
         if not number:
             msg = "No numbers available"
+            exc = NumberPoolEmpty
             if from_sid:
                 msg = "Session number unavailable"
+                exc = SessionNumberUnavailable
             error(msg)
-            raise NumberPoolEmpty(msg)
+            raise exc(msg)
         return number
 
     def _get_init_lock(self):
