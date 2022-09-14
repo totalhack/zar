@@ -36,7 +36,10 @@ const analytics = init({
     overlayQuerySelector: '.cta[data-cta-attr="phone"]',
     renewalInterval: 10 * 1000,
     initCallback: function (x) { console.log('init callback!', x) },
-    contextCallback: function () { console.log('context callback!') }
+    contextCallback: function () {
+      console.log('context callback!')
+      return { url: window.location.href }
+    }
   }
 });
 

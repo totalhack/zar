@@ -374,8 +374,12 @@ function zar({ apiUrl, poolConfig }) {
         delete payload.properties["search"];
       }
 
-      if (config.poolConfig && config.poolConfig.poolId) {
-        payload.properties.pool_id = getPoolId(config.poolConfig.poolId);
+      var pcfg = config.poolConfig;
+      if (pcfg && pcfg.poolId) {
+        payload.properties.pool_id = getPoolId(pcfg.poolId);
+        if (pcfg.contextCallback) {
+          payload.properties.pool_context = pcfg.contextCallback() || {};
+        }
       }
       return payload;
     },
