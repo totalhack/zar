@@ -28,9 +28,9 @@ DAYS = 24 * HOURS
 NUMBER_POOL_CONNECT_TRIES = 5
 # TODO read these from pool configs
 # If number hasn't been renewed in this time, mark expired (eligible to be taken)
-NUMBER_POOL_CACHE_EXPIRATION = 2 * MINUTES
+NUMBER_POOL_CACHE_EXPIRATION = 3 * MINUTES
 # Numbers can get renewed for this amount of time max
-NUMBER_POOL_MAX_RENEWAL_AGE = 72 * HOURS
+NUMBER_POOL_MAX_RENEWAL_AGE = 5 * DAYS
 # How long we keep call_from -> call_to route contexts cached
 NUMBER_POOL_ROUTE_CACHE_EXPIRATION = 14 * DAYS
 
