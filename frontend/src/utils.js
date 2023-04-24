@@ -20,11 +20,15 @@ export function isFunc(value) {
 }
 
 export function isBot() {
-  var ua = navigator.userAgent || ''
-  var bots = new RegExp([
-    /bot/, /spider/, /crawl/, /mediapartners/, /Google-Read-Aloud/, /semrush/
-  ].map((r) => r.source).join("|"), "i")
-  return bots.test(ua)
+  try {
+    var ua = navigator.userAgent || ''
+    var bots = new RegExp([
+      /bot/, /spider/, /crawl/, /mediapartners/, /Google-Read-Aloud/, /semrush/
+    ].map((r) => r.source).join("|"), "i")
+    return bots.test(ua)
+  } catch (e) {
+    return false
+  }
 }
 
 export function afterDOMContentLoaded(func) {

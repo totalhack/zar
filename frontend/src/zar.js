@@ -374,19 +374,38 @@ function zar({ apiUrl, poolConfig }) {
         delete payload.properties["search"];
       }
 
-      var pcfg = config.poolConfig;
-      if (pcfg && pcfg.poolId) {
-        payload.properties.pool_id = getPoolId(pcfg.poolId);
-        if (pcfg.contextCallback) {
-          payload.properties.pool_context = pcfg.contextCallback() || {};
+      try {
+        var pcfg = config.poolConfig;
+        if (pcfg && pcfg.poolId) {
+          payload.properties.pool_id = getPoolId(pcfg.poolId);
+          if (pcfg.contextCallback) {
+            payload.properties.pool_context = pcfg.contextCallback() || {};
+          }
         }
+      } catch (e) {
+        warning("error getting pool id: " + JSON.stringify(e));
       }
       return payload;
     },
     page: async function ({ payload, options, instance, config }) {
       dbg('page', payload, options, config);
-      var res = await httpPost({ url: `${config.apiUrl}/page`, data: payload });
-      if (res.pool_data) {
+      var tries = 0;
+      var maxTries = 3;
+      var res;
+      while (tries < maxTries) {
+        try {
+          res = await httpPost({ url: `${config.apiUrl}/page`, data: payload });
+          break;
+        } catch (e) {
+          tries++;
+          if (tries >= maxTries) {
+            warning("error posting page: " + JSON.stringify(e));
+            throw e;
+          }
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      if (res && res.pool_data) {
         initTrackingPool({ poolData: res.pool_data, poolConfig: config.poolConfig, apiUrl: config.apiUrl })
       }
     },

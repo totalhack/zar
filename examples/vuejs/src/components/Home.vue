@@ -32,7 +32,7 @@ export default {
   methods: {
     reset: async function () {
       await this.$analytics.reset();
-      this.$analytics.plugins.zar.initIds();
+      this.$analytics.plugins.zar.initIDs();
       this.storage = this.$analytics.plugins.zar.getStorage();
     },
     clear: async function () {
