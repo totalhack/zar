@@ -39,7 +39,7 @@ def page(client, req=SAMPLE_PAGE_REQUEST):
     data = resp.json()
     pp(data)
     assert data.get("id", None)
-    cookies = resp.cookies.get_dict()
+    cookies = dict(resp.cookies)
     assert "_zar_sid" in cookies
     return resp, data
 
@@ -51,7 +51,7 @@ def page_with_pool(client, pool_id=1, max_age=None):
         req["properties"]["pool_max_age"] = max_age
     req["properties"]["url"] = "http://localhost:8080/one?pl=1"
     resp, data = page(client, req=req)
-    cookies = resp.cookies.get_dict()
+    cookies = dict(resp.cookies)
     assert "_zar_pool" in cookies
     return resp, data
 
