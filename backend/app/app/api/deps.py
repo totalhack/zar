@@ -25,6 +25,8 @@ def get_conn() -> Generator:
 # For use in sync endpoints: https://github.com/tiangolo/fastapi/issues/393#issuecomment-584408572
 async def get_body_data(request: Request):
     data = None
+    if "content-type" not in request.headers:
+        raise HTTPException(status_code=422, detail="Missing content type")
     if request.headers["content-type"] == "application/x-www-form-urlencoded":
         data = await request.form()
     elif request.headers["content-type"] == "application/json":
