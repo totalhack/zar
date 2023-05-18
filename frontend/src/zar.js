@@ -1,6 +1,5 @@
 import { Analytics } from 'analytics';
-import googleTagManager from '@analytics/google-tag-manager';
-
+import { facebook } from './facebook';
 import { googleAnalytics4 } from './googleAnalytics4';
 import {
   dbg,
@@ -482,7 +481,7 @@ function zar({ apiUrl, poolConfig }) {
   };
 }
 
-function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null, poolConfig = null }) {
+function init({ app, ga4Config = null, facebookConfig = null, apiUrl = null, poolConfig = null }) {
   // Opinionated init of Analytics
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
@@ -492,8 +491,8 @@ function init({ app, gtmConfig = null, ga4Config = null, apiUrl = null, poolConf
   if (ga4Config) {
     plugins.push(googleAnalytics4(ga4Config));
   }
-  if (gtmConfig) {
-    plugins.push(googleTagManager(gtmConfig));
+  if (facebookConfig) {
+    plugins.push(facebook(facebookConfig));
   }
 
   return Analytics({ app, plugins });

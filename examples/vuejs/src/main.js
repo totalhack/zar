@@ -16,9 +16,6 @@ const router = new VueRouter({
 
 const analytics = init({
   app: 'my-vue-app',
-  gtmConfig: {
-    containerId: process.env.VUE_APP_GTM_CONTAINER_ID
-  },
   ga4Config: {
     trackingId: process.env.VUE_APP_GA4_TRACKING_ID,
     customDimensions: [
@@ -27,6 +24,9 @@ const analytics = init({
         'callback': function (instance, config) { return instance.plugins.zar.getVID() }
       }
     ]
+  },
+  facebookConfig: {
+    trackingId: process.env.VUE_APP_FACEBOOK_PIXEL_ID
   },
   apiUrl: 'http://localhost/api/v2',
   poolConfig: {
