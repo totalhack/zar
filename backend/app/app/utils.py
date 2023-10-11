@@ -14,24 +14,24 @@ if settings.ROLLBAR_ENABLED:
     import rollbar
 
 
-def rb_msg(msg, level):
+def rb_msg(msg, level, request=None, extra_data=None):
     if settings.ROLLBAR_ENABLED:
         if not isinstance(msg, str):
             try:
                 msg = json.dumps(msg)
             except:
                 pass
-        rollbar.report_message(msg, level)
+        rollbar.report_message(msg, level, request=request, extra_data=extra_data)
 
 
-def rb_warning(msg):
+def rb_warning(msg, request=None, extra_data=None):
     warn(msg)
-    rb_msg(msg, "warning")
+    rb_msg(msg, "warning", request=request, extra_data=extra_data)
 
 
-def rb_error(msg):
+def rb_error(msg, request=None, extra_data=None):
     error(msg)
-    rb_msg(msg, "error")
+    rb_msg(msg, "error", request=request, extra_data=extra_data)
 
 
 def print_request(headers, body):

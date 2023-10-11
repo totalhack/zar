@@ -48,6 +48,7 @@ CID_COOKIE_MAX_AGE = 2 * 365 * DAYS
 CID_COOKIE_NAME = "_zar_cid"
 SID_COOKIE_MAX_AGE = 7 * DAYS
 SID_COOKIE_NAME = "_zar_sid"
+# This should line up with the pool max renewal time
 POOL_COOKIE_MAX_AGE = 7 * DAYS
 POOL_COOKIE_NAME = "_zar_pool"
 
@@ -75,7 +76,7 @@ def get_pool_context(vid, sid, sid_original_referer, context, headers):
     return res
 
 
-def get_pool_number(pool_api, pool_id, context, number=None):
+def get_pool_number(pool_api, pool_id, context, number=None, request=None):
     if not pool_api:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
@@ -100,21 +101,23 @@ def get_pool_number(pool_api, pool_id, context, number=None):
             number=None,
             msg=NumberPoolResponseMessages.EMPTY,
         )
-        rb_error(f"NumberPoolEmpty: pool ID {pool_id}: {str(e)}")
+        rb_error(f"NumberPoolEmpty: pool ID {pool_id}: {str(e)}", request=request)
     except SessionNumberUnavailable as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
             msg=NumberPoolResponseMessages.NUMBER_UNAVAILABLE,
         )
-        rb_warning(f"SessionNumberUnavailable: pool ID {pool_id}: {str(e)}")
+        rb_warning(
+            f"SessionNumberUnavailable: pool ID {pool_id}: {str(e)}", request=request
+        )
     except NumberNotFound as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
             number=None,
             msg=NumberPoolResponseMessages.NOT_FOUND,
         )
-        rb_warning(f"NumberNotFound: pool ID {pool_id}: {str(e)}")
+        rb_warning(f"NumberNotFound: pool ID {pool_id}: {str(e)}", request=request)
     except NumberMaxRenewalExceeded as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
@@ -137,7 +140,7 @@ def set_pool_cookie(response, data, headers, max_age=POOL_COOKIE_MAX_AGE):
     )
 
 
-def handle_pool_request(zar, props, cookie, headers, response):
+def handle_pool_request(zar, props, cookie, headers, request, response):
     start = time.time()
     use_pool = False
     pool_sesh = {}
@@ -145,6 +148,7 @@ def handle_pool_request(zar, props, cookie, headers, response):
     if not pool_id:
         dbg("No pool ID on request")
         return
+
     pool_id = int(pool_id)
     pool_context = props.get("pool_context", None) or {}
 
@@ -153,7 +157,9 @@ def handle_pool_request(zar, props, cookie, headers, response):
             pool_sesh = json.loads(cookie)
             use_pool = pool_sesh["enabled"]
         except Exception as e:
-            rb_warning(f"Could not parse pool cookie: {cookie}: {str(e)}")
+            rb_warning(
+                f"Could not parse pool cookie: {cookie}: {str(e)}", request=request
+            )
     else:
         parsed = urlparse(props["url"])
         qs = parse_qs(parsed.query)
@@ -171,7 +177,7 @@ def handle_pool_request(zar, props, cookie, headers, response):
     if pool_sesh and str(pool_id) in pool_sesh["numbers"]:
         sesh_result = pool_sesh["numbers"][str(pool_id)]
         if sesh_result["status"] != NumberPoolResponseStatus.SUCCESS:
-            # Return cached unsuccessful call result
+            warn(f"Returning cached unsuccessful pool result: {sesh_result}")
             return sesh_result
 
         if sesh_result["number"]:
@@ -186,7 +192,9 @@ def handle_pool_request(zar, props, cookie, headers, response):
     )
 
     global pool_api
-    pool_resp = get_pool_number(pool_api, pool_id, request_context, number=pool_number)
+    pool_resp = get_pool_number(
+        pool_api, pool_id, request_context, number=pool_number, request=request
+    )
     info(f"{sid}: {pool_resp}")
 
     # NOTE: numeric pool IDs get coerced to str in json.dumps, so we need to
@@ -235,11 +243,11 @@ def page(
     pool_data = None
     try:
         pool_data = handle_pool_request(
-            zar, body["properties"], _zar_pool, headers, response
+            zar, body["properties"], _zar_pool, headers, request, response
         )
         body["properties"]["pool_data"] = pool_data
     except Exception as e:
-        rb_error(f"handle_pool_request failed: {str(e)}")
+        rb_error(f"handle_pool_request failed: {str(e)}", request=request)
 
     stmt = insert(models.Page).values(
         vid=vid,
@@ -396,7 +404,7 @@ def number_pool(
 
     body["properties"] = body["properties"] or {}
     if body["properties"].get("is_bot", False) and not settings.ALLOW_BOTS:
-        info(f"skipping bot: {headers['user_agent']}")
+        warn(f"skipping bot: {headers['user_agent']}")
         return {}
 
     renew = False
@@ -404,7 +412,7 @@ def number_pool(
         renew = True
 
     if renew and (not _zar_pool):
-        # We the cookie was set on the first call either in this endpoint or page().
+        # The cookie is set on the first call either in this endpoint or page().
         # If it's missing, it must have expired.
         warn(f"number session expired: {body['properties']}")
         return dict(
@@ -433,7 +441,9 @@ def number_pool(
     origRef = zar["sid"].get("origReferrer", None)
     request_context = get_pool_context(vid, sid, origRef, context, headers)
     global pool_api
-    res = get_pool_number(pool_api, pool_id, request_context, number=number)
+    res = get_pool_number(
+        pool_api, pool_id, request_context, number=number, request=request
+    )
 
     if not renew:
         pool_sesh = dict(enabled=True, numbers={pool_id: res})
@@ -463,7 +473,7 @@ def track_call(
             status=NumberPoolResponseStatus.ERROR,
             msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
-        rb_warning(res)
+        rb_warning(res, request=request)
         return res
 
     call_to = body["call_to"].lstrip("+1")
@@ -518,7 +528,7 @@ def track_call(
     try:
         conn.execute(insert_stmt)
     except Exception as e:
-        rb_error(f"Failed to save TrackCall record: {str(e)}")
+        rb_error(f"Failed to save TrackCall record: {str(e)}", request=request)
         return dict(
             status=NumberPoolResponseStatus.ERROR,
             msg=NumberPoolResponseMessages.INTERNAL_ERROR,

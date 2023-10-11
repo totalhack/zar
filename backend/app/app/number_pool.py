@@ -28,9 +28,9 @@ DAYS = 24 * HOURS
 NUMBER_POOL_CONNECT_TRIES = 5
 # TODO read these from pool configs
 # If number hasn't been renewed in this time, mark expired (eligible to be taken)
-NUMBER_POOL_CACHE_EXPIRATION = 3 * MINUTES
+NUMBER_POOL_CACHE_EXPIRATION = 4 * MINUTES
 # Numbers can get renewed for this amount of time max
-NUMBER_POOL_MAX_RENEWAL_AGE = 5 * DAYS
+NUMBER_POOL_MAX_RENEWAL_AGE = 7 * DAYS
 # How long we keep call_from -> call_to route contexts cached
 NUMBER_POOL_ROUTE_CACHE_EXPIRATION = 14 * DAYS
 
@@ -215,8 +215,8 @@ class NumberPoolAPI:
         context = NumberPoolCacheValue(**context)
         self.conn.set(number, context.json())
 
-    def get_number_status(self, number):
-        res = self.get_number_context(number)
+    def get_number_status(self, number, with_age=False):
+        res = self.get_number_context(number, with_age=with_age)
         if not res:
             return NumberStatus.FREE, None
         if self._number_context_expired(res):
@@ -280,7 +280,8 @@ class NumberPoolAPI:
                     target_number = sid_number
 
                 if target_number:
-                    status, ctx = self.get_number_status(target_number)
+                    status, ctx = self.get_number_status(target_number, with_age=True)
+                    info(f"{request_sid}: target number {target_number} ctx: {ctx}")
                     if status == NumberStatus.FREE:
                         dbg(f"{request_sid}: target number {target_number} free")
                         number = self._lease_free_number(
@@ -323,7 +324,7 @@ class NumberPoolAPI:
             if from_sid:
                 msg = "Session number unavailable"
                 exc = SessionNumberUnavailable
-            error(msg)
+            error(msg + f": {locals()}")
             raise exc(msg)
         return number
 
