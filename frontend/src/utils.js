@@ -8,7 +8,7 @@ export function dbg() {
   console.debug(...arguments);
 }
 
-export function warning(msg) {
+export function warn(msg) {
   console.warn(msg)
   if (window.Rollbar) {
     window.Rollbar.warning(msg);
@@ -183,7 +183,7 @@ async function postBeacon({ url, data }) {
       }
       return false;
     } catch (e) {
-      warning("postBeacon:", e)
+      warn("postBeacon:", e)
       return false;
     }
   }

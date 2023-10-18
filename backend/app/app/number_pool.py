@@ -272,7 +272,7 @@ class NumberPoolAPI:
                 if sid_number:
                     if target_number and sid_number != target_number:
                         warn(
-                            f"{request_sid}: Session / Target number mismatch: {sid_number} / {target_number}"
+                            f"{request_sid}: Session / Target number mismatch: {sid_number} / {target_number}: {request_context}"
                         )
                         sid_number_mismatch = True
                     from_sid = True
@@ -281,7 +281,10 @@ class NumberPoolAPI:
 
                 if target_number:
                     status, ctx = self.get_number_status(target_number, with_age=True)
-                    info(f"{request_sid}: target number {target_number} ctx: {ctx}")
+                    if sid_number_mismatch:
+                        # Additional logging to debug this case
+                        warn(f"{request_sid}: target number {target_number} ctx: {ctx}")
+
                     if status == NumberStatus.FREE:
                         dbg(f"{request_sid}: target number {target_number} free")
                         number = self._lease_free_number(
@@ -326,6 +329,7 @@ class NumberPoolAPI:
                 exc = SessionNumberUnavailable
             error(msg + f": {locals()}")
             raise exc(msg)
+
         return number
 
     def _get_init_lock(self):

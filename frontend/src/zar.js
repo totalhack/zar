@@ -5,12 +5,11 @@ import {
   dbg,
   getSessionStorage,
   setSessionStorage,
-  removeSessionStorage,
   hasAdBlock,
   isBot,
   httpGet,
   httpPost,
-  warning,
+  warn,
   afterDOMContentLoaded,
   isFunc
 } from './utils';
@@ -22,6 +21,7 @@ var NUMBER_POOL_RENEWAL_TIME_MS = 30 * 1000;
 var getNumberFailureCount = 0
 var MAX_GET_NUMBER_FAILURES = 3
 var poolIntervals = {}
+window.zarPoolData = null;
 
 // Tracks original phone numbers that have been replaced so
 // we can revert if necessary.
@@ -82,14 +82,6 @@ function getIDs() {
   };
 }
 
-function removeID(key) {
-  removeSessionStorage(key);
-}
-
-function removeIDs() {
-  removeID(VID_KEY);
-}
-
 function extractPhoneNumber({ elem }) {
   // NOTE: only tested for US numbers!
   var numberText = null;
@@ -110,7 +102,7 @@ function extractPhoneNumber({ elem }) {
   return { text, html, numberText, href, number };
 }
 
-function overlayPhoneNumber({ elems, number }) {
+function overlayPhoneNumber({ elems, number, force = false }) {
   var origNum;
   var overlayNum = number;
   if (!number.startsWith("+1")) {
@@ -119,22 +111,28 @@ function overlayPhoneNumber({ elems, number }) {
 
   for (var i = 0; i < elems.length; i++) {
     if (numberOverlayMap.has(elems[i])) {
-      dbg("element already in overlay map:", elems[i]);
-      continue;
+      if (force) {
+        origNum = numberOverlayMap.get(elems[i]);
+      } else {
+        dbg("element already in overlay map:", elems[i]);
+        continue
+      }
     }
 
     var elemNum = extractPhoneNumber({ elem: elems[i] });
 
     if (!origNum) {
       origNum = elemNum;
-    } else if ((elemNum.number && origNum.number) && (origNum.number !== elemNum.number)) {
-      warning('overlaying multiple numbers with a single number', origNum.number, elemNum.number);
+    } else if ((!force) && (elemNum.number && origNum.number) && (origNum.number !== elemNum.number)) {
+      warn('overlaying multiple numbers with a single number', origNum.number, elemNum.number);
     }
 
     dbg("overlaying", overlayNum, "on", elems[i]);
 
-    // Store the original values
-    numberOverlayMap.set(elems[i], elemNum);
+    // Store the original values if this is the first time overlaying
+    if (!numberOverlayMap.has(elems[i])) {
+      numberOverlayMap.set(elems[i], elemNum);
+    }
 
     if (elemNum.href) {
       elems[i].href = "tel:" + overlayNum;
@@ -217,8 +215,6 @@ async function getPoolStats({ apiUrl, key = null, with_contexts = false }) {
 }
 
 async function renewTrackingPool({
-  poolId,
-  number,
   overlayElements,
   apiUrl = getDefaultApiUrl(),
   contextCallback = null
@@ -228,16 +224,17 @@ async function renewTrackingPool({
     context = contextCallback() || {};
   }
 
+  const poolId = window.zarPoolData.pool_id;
+  const number = window.zarPoolData.number;
+
   try {
     var resp = await getPoolNumber({ poolId, apiUrl, number, context });
   } catch (e) {
-    // We don't clear the pool interval in here -- assumes the service is
-    // down or the error was intermitten, allows retrying
     var msg = "error getting number: " + JSON.stringify(e);
-    warning(msg);
+    warn(msg);
     getNumberFailureCount++;
     if (getNumberFailureCount >= MAX_GET_NUMBER_FAILURES) {
-      warning("max failures, stopping pool")
+      warn("max failures, stopping pool")
       clearPoolIntervals();
       if (overlayElements) {
         revertOverlayNumbers({ elems: overlayElements });
@@ -247,8 +244,14 @@ async function renewTrackingPool({
   }
 
   if (resp.status === NUMBER_POOL_SUCCESS && resp.number) {
+    var force = false;
+    if (resp.number !== window.zarPoolData.number) {
+      warn("number changed from " + window.zarPoolData.number + " to " + resp.number);
+      window.zarPoolData.number = resp.number;
+      force = true;
+    }
     if (overlayElements) {
-      overlayPhoneNumber({ elems: overlayElements, number: resp.number });
+      overlayPhoneNumber({ elems: overlayElements, number: resp.number, force });
     }
   } else {
     if (overlayElements) {
@@ -273,7 +276,7 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
 
   if (!poolConfig || !poolConfig.poolId || !poolConfig.overlayQuerySelector || !apiUrl) {
     msg = 'missing pool config: ' + JSON.stringify(poolConfig);
-    warning(msg);
+    warn(msg);
     if (poolConfig.initCallback) {
       poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
     }
@@ -288,7 +291,7 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
   var poolId = getPoolId(poolConfig.poolId)
   if (!poolId) {
     msg = 'no pool ID';
-    warning(msg);
+    warn(msg);
     if (poolConfig.initCallback) {
       poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
     }
@@ -300,7 +303,7 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
       poolData = await getPoolNumber({ poolId, apiUrl, number: null, context });
     } catch (e) {
       msg = "error getting number on init: " + JSON.stringify(e);
-      warning(msg)
+      warn(msg)
       if (poolConfig.initCallback) {
         poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
       }
@@ -308,12 +311,14 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
     }
   }
 
+  window.zarPoolData = poolData;
+
   if (poolData && poolData.status === NUMBER_POOL_SUCCESS && poolData.number) {
     afterDOMContentLoaded(function () {
       var overlayElements = document.querySelectorAll(poolConfig.overlayQuerySelector);
       if (!overlayElements) {
         var msg = 'No elems found for:' + poolConfig.overlayQuerySelector
-        warning(msg)
+        warn(msg)
         if (poolConfig.initCallback) {
           poolConfig.initCallback({ status: NUMBER_POOL_ERROR, msg });
         }
@@ -326,15 +331,13 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
         function () {
           try {
             renewTrackingPool({
-              poolId: poolData.pool_id,
-              number: poolData.number,
               overlayElements,
               apiUrl,
               contextCallback: poolConfig.contextCallback
             });
           } catch (e) {
             var msg = "error on interval: " + JSON.stringify(e);
-            warning(msg);
+            warn(msg);
           }
         },
         poolConfig.renewalInterval || NUMBER_POOL_RENEWAL_TIME_MS
@@ -382,7 +385,7 @@ function zar({ apiUrl, poolConfig }) {
           }
         }
       } catch (e) {
-        warning("error getting pool id: " + JSON.stringify(e));
+        warn("error getting pool id: " + JSON.stringify(e));
       }
       return payload;
     },
@@ -398,7 +401,7 @@ function zar({ apiUrl, poolConfig }) {
         } catch (e) {
           tries++;
           if (tries >= maxTries) {
-            warning("error posting page: " + JSON.stringify(e));
+            warn("error posting page: " + JSON.stringify(e));
             throw e;
           }
           await new Promise(r => setTimeout(r, 1000));
