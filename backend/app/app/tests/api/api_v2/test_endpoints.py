@@ -1,3 +1,4 @@
+import copy
 import time
 
 from fastapi.testclient import TestClient
@@ -54,6 +55,14 @@ def page_with_pool(client, pool_id=1, max_age=None):
     cookies = dict(resp.cookies)
     assert "_zar_pool" in cookies
     return resp, data
+
+
+def reset_pool(client):
+    resp = client.get(
+        f"{settings.API_V2_STR}/reset_pool",
+        params=dict(key="abc", pool_id=1, preserve=False),
+    )
+    assert resp.status_code == 200
 
 
 def test_endpoint_page(client: TestClient) -> None:
@@ -150,7 +159,30 @@ def test_endpoint_number_pool_no_sid(client: TestClient) -> None:
     )
 
 
+def test_endpoint_number_pool_update(client: TestClient) -> None:
+    resp, data = page(client)  # without pool, just to set cookies
+    resp = client.post(
+        f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+
+    new_req = copy.deepcopy(SAMPLE_NUMBER_POOL_REQUEST)
+    new_req["context"]["foo"] = "update"  # Put a new value in the context
+    new_req["number"] = data["number"]
+    resp = client.post(f"{settings.API_V2_STR}/update_number", json=new_req)
+    data = resp.json()
+    pp(data)
+    assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+    vid = new_req["properties"]["zar"]["vid"]["id"]
+    assert data["context"]["request_context"]["visits"][vid]["foo"] == "update"
+
+
 def test_endpoint_number_session_expired(client: TestClient) -> None:
+    reset_pool(client)
+
     MAX_AGE = 2
     resp, data = page_with_pool(client, max_age=MAX_AGE)
     assert data.get("pool_data", None) and data["pool_data"].get("number", None)
@@ -187,11 +219,7 @@ def test_endpoint_call_track_error(client: TestClient) -> None:
 
 
 def test_endpoint_call_track_success(client: TestClient) -> None:
-    resp = client.get(
-        f"{settings.API_V2_STR}/reset_pool",
-        params=dict(key="abc", pool_id=1, preserve=False),
-    )
-    assert resp.status_code == 200
+    reset_pool(client)
 
     resp, data = page(client)  # without pool, just to set cookies
     resp = client.post(

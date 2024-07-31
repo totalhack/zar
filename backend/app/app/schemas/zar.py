@@ -37,6 +37,15 @@ class NumberPoolRequestBody(BaseModel):
     meta: Dict[str, Any] = None
 
 
+class UpdateNumberRequestBody(BaseModel):
+    pool_id: int
+    number: str
+    context: Dict[str, Any]
+    properties: Dict[str, Any] = None
+    options: Dict[str, Any] = None
+    meta: Dict[str, Any] = None
+
+
 class NumberPoolCacheValue(BaseModel):
     pool_id: int
     leased_at: float

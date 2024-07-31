@@ -19,6 +19,7 @@ from app.schemas.zar import (
     TrackRequestBody,
     TrackCallRequestBody,
     NumberPoolRequestBody,
+    UpdateNumberRequestBody,
 )
 from app.api import deps
 from app.core.config import settings
@@ -71,6 +72,7 @@ def get_pool_context(vid, sid, sid_original_referer, context, headers):
         user_agent=headers["user_agent"],
         referer=headers["referer"],
         host=headers["host"],
+        latest_context=context,
         visits={vid: context},  # TODO need to confirm renewal ctx merge works
     )
     return res
@@ -440,6 +442,7 @@ def number_pool(
     context = body["context"] or {}
     origRef = zar["sid"].get("origReferrer", None)
     request_context = get_pool_context(vid, sid, origRef, context, headers)
+
     global pool_api
     res = get_pool_number(
         pool_api, pool_id, request_context, number=number, request=request
@@ -452,6 +455,53 @@ def number_pool(
 
     info(f"took: {time.time() - start:0.3f}s, {res}")
     return res
+
+
+@router.post("/update_number", response_model=Dict[str, Any])
+def update_number(
+    body: UpdateNumberRequestBody,
+    request: Request,
+    _zar_sid: Optional[str] = Cookie(None),
+    _zar_cid: Optional[str] = Cookie(None),
+    _zar_pool: Optional[str] = Cookie(None),
+) -> Dict[str, Any]:
+    start = time.time()
+    body = dict(body)
+    if settings.DEBUG:
+        print_request(request.headers, body)
+    headers = extract_header_params(request.headers)
+    _zar_sid, _zar_cid, _zar_pool = unquote_cookies(_zar_sid, _zar_cid, _zar_pool)
+
+    body["properties"] = body["properties"] or {}
+    if body["properties"].get("is_bot", False) and not settings.ALLOW_BOTS:
+        warn(f"skipping bot: {headers['user_agent']}")
+        return {}
+
+    zar = body["properties"].get("zar", {}) or {}
+    zar = get_zar_dict(
+        zar, headers, sid_cookie=_zar_sid, cid_cookie=_zar_cid, create=False
+    )
+    vid, sid, _ = get_zar_ids(zar)
+
+    if not sid:
+        warn(f"No SID: zar:{zar} cookie:{_zar_sid}")
+        return dict(
+            status=NumberPoolResponseStatus.ERROR,
+            number=None,
+            msg=NumberPoolResponseMessages.NO_SID,
+        )
+
+    pool_id = body["pool_id"]
+    number = body["number"]
+    context = body["context"]
+    origRef = zar["sid"].get("origReferrer", None)
+    request_context = get_pool_context(vid, sid, origRef, context, headers)
+
+    global pool_api
+    res = pool_api.update_number(pool_id, number, request_context, merge=True)
+
+    info(f"took: {time.time() - start:0.3f}s, {res}")
+    return dict(status=NumberPoolResponseStatus.SUCCESS, context=res, msg=None)
 
 
 @router.post("/track_call", response_model=Dict[str, Any])

@@ -33,6 +33,26 @@ def test_pool_lease_number():
     pp(taken)
 
 
+def test_pool_update_number():
+    pool_api._reset_pool(DEFAULT_POOL_ID, preserve=False)
+    num = pool_api.lease_number(DEFAULT_POOL_ID, dict(sid="1"))
+    assert num
+    print("number:", num)
+    ctx = pool_api.get_number_context(num)
+    request_context = ctx["request_context"]
+    request_context["foo"] = "bar"
+    pool_api.update_number(DEFAULT_POOL_ID, num, request_context, merge=True)
+    ctx = pool_api.get_number_context(num)
+    assert ctx["request_context"]["foo"] == "bar"
+
+    # Should fail to update number
+    request_context["sid"] = "2"
+    request_context["foo"] = "baz"
+    pool_api.update_number(DEFAULT_POOL_ID, num, request_context, merge=True)
+    ctx = pool_api.get_number_context(num)
+    assert ctx["request_context"]["foo"] == "bar"
+
+
 def test_pool_lease_invalid_number():
     pool_api._reset_pool(DEFAULT_POOL_ID, preserve=False)
     with pytest.raises(NumberNotFound):

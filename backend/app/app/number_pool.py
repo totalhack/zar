@@ -1,3 +1,4 @@
+import copy
 import time
 
 import redis
@@ -300,6 +301,10 @@ class NumberPoolAPI:
                             f"{request_sid}: target number {target_number} taken, renewal requested"
                         )
                         if request_context:
+                            # HACK: we can overwrite everything besides visits dict which needs to be merged
+                            visits = ctx["request_context"].get("visits", None) or {}
+                            visits.update(request_context.get("visits", None) or {})
+                            request_context["visits"] = visits
                             ctx["request_context"].update(request_context)
                         try:
                             res = self._renew_number(
@@ -331,6 +336,44 @@ class NumberPoolAPI:
             raise exc(msg)
 
         return number
+
+    def update_number(self, pool_id, number, request_context, merge=False):
+        start = time.time()
+        request_sid = self._get_session_id(pool_id, request_context)
+
+        dbg(
+            f"{request_sid}: pool_id: {pool_id}, number {number}, request_context: {request_context}, merge: {merge}"
+        )
+
+        try:
+            with self._get_pool_lock(pool_id):
+                status, ctx = self.get_number_status(number)
+                if not ctx:
+                    warn(
+                        f"{request_sid}: number {number} has no context, can not update"
+                    )
+                    return {}
+
+                curr_request_ctx = ctx.get("request_context", {}) or {}
+                curr_sid = self._get_session_id(pool_id, curr_request_ctx)
+                if request_sid != curr_sid:
+                    msg = f"session key mismatch for {pool_id}/{number} {request_sid}/{curr_sid}, can not update"
+                    warn(msg)
+                    return ctx
+
+                if merge:
+                    ctx["request_context"] = dictmerge(
+                        curr_request_ctx, request_context, overwrite=True
+                    )
+                else:
+                    ctx["request_context"] = request_context
+
+                self.set_number_context(number, ctx)
+        except LockError as e:
+            raise NumberPoolUnavailable(f"Could not acquire pool {pool_id} lock")
+
+        dbg(f"{request_sid}: took {time.time() - start:0.3f}s, number: {number}")
+        return ctx
 
     def _get_init_lock(self):
         init_lock_name = "Pool Init"
