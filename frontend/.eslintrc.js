@@ -12,7 +12,8 @@ module.exports = {
     "rules": {
         "no-console": 0,
         "no-unused-vars": 0,
-        "no-debugger": 0
+        "no-debugger": 0,
+        "comma-dangle": 0
     },
     "settings": {
         "polyfills": ["Promise"],
