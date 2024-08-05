@@ -432,11 +432,6 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
     return poolIntervals;
   }
 
-  var context = drainPoolDataLayer() || {};
-  if (poolConfig.contextCallback) {
-    context = poolConfig.contextCallback(context) || {};
-  }
-
   var poolId = getPoolId(poolConfig.poolId);
   if (!poolId) {
     msg = "no pool ID";
@@ -448,6 +443,11 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
   }
 
   if (!poolData) {
+    var context = drainPoolDataLayer() || {};
+    if (poolConfig.contextCallback) {
+      context = poolConfig.contextCallback(context) || {};
+    }
+
     try {
       poolData = await getPoolNumber({ poolId, apiUrl, number: null, context });
     } catch (e) {
