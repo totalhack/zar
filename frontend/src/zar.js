@@ -252,8 +252,12 @@ function poolActive() {
 }
 
 function drainPoolDataLayer() {
-  if (!window.zarPoolDataLayer || !Array.isArray(window.zarPoolDataLayer)) {
-    return {};
+  if (
+    !window.zarPoolDataLayer ||
+    !Array.isArray(window.zarPoolDataLayer) ||
+    window.zarPoolDataLayer.length === 0
+  ) {
+    return null;
   }
 
   var mergedObject = {};
