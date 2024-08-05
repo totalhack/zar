@@ -396,6 +396,18 @@ function initPoolDataLayerObserver(apiUrl) {
     return result;
   };
 
+  // Do an initial drain in case data was added between contextCallback
+  // and the observer being set up.
+  var context = drainPoolDataLayer();
+  if (context) {
+    updateTrackingNumberContext({
+      apiUrl,
+      poolId: window.zarPoolData.pool_id,
+      number: window.zarPoolData.number,
+      context
+    });
+  }
+
   window.zarPoolDLObserverDone = true;
 }
 
