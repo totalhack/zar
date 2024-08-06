@@ -584,7 +584,7 @@ def track_call(
             msg=NumberPoolResponseMessages.INTERNAL_ERROR,
         )
 
-    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx_json)
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
 
 
 @router.get("/refresh_number_pool_conn", response_model=Dict[str, Any])
