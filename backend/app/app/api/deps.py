@@ -1,7 +1,7 @@
 from typing import Generator
 
 from fastapi import HTTPException, Request
-from tlbx import json, st
+from tlbx import json, st, warn
 
 from app.db.session import SessionLocal, engine
 
@@ -33,7 +33,12 @@ async def get_body_data(request: Request):
         data = await request.json()
     elif "text/plain" in request.headers["content-type"]:
         data = await request.body()
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except:
+            warn("Error parsing body JSON")
+            warn(data)
+            raise
     else:
         raise HTTPException(status_code=422, detail="Invalid content")
     return data
