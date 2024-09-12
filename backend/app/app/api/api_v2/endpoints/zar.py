@@ -500,7 +500,7 @@ def update_number(
     global pool_api
     res = pool_api.update_number(pool_id, number, request_context, merge=True)
 
-    info(f"took: {time.time() - start:0.3f}s, {res}")
+    info(f"took: {time.time() - start:0.3f}s, {pool_id} / {number}")
     return dict(status=NumberPoolResponseStatus.SUCCESS, context=res, msg=None)
 
 
