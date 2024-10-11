@@ -602,7 +602,9 @@ def refresh_number_pool_conn(request: Request, key: str = None) -> Dict[str, Any
 
 
 @router.get("/init_number_pools", response_model=Dict[str, Any])
-def init_number_pools(request: Request, key: str = None) -> Dict[str, Any]:
+def init_number_pools(
+    request: Request, key: str = None, pool_id: int = None
+) -> Dict[str, Any]:
     if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
         raise HTTPException(status_code=403, detail="Forbidden")
     global pool_api
@@ -611,7 +613,8 @@ def init_number_pools(request: Request, key: str = None) -> Dict[str, Any]:
             status=NumberPoolResponseStatus.ERROR,
             msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
         )
-    res = pool_api.init_pools()
+    pool_ids = [pool_id] if pool_id else None
+    res = pool_api.init_pools(pool_ids=pool_ids)
     return dict(status=NumberPoolResponseStatus.SUCCESS, msg=json.dumps(res))
 
 

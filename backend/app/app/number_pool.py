@@ -156,7 +156,7 @@ class NumberPoolAPI:
         )
         return set([x["number"] for x in res.fetchall()])
 
-    def init_pools(self):
+    def init_pools(self, pool_ids=None):
         start = time.time()
         pools = []
         errors = []
@@ -168,6 +168,10 @@ class NumberPoolAPI:
                 pools = self.get_pools_from_db()  # TODO store pool configs in redis
                 for pool in pools:
                     pool_id = pool["id"]
+                    if pool_ids and (pool_id not in pool_ids):
+                        info(f"Skipping pool {pool_id}/{pool['name']}")
+                        continue
+
                     try:
                         with self._get_pool_lock(pool_id):
                             numbers = self.get_pool_numbers_from_db(pool_id)

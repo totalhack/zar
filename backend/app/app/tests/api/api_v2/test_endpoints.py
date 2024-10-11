@@ -135,6 +135,22 @@ SAMPLE_NUMBER_POOL_REQUEST = {
 }
 
 
+def test_endpoint_init_number_pools(client: TestClient) -> None:
+    resp = client.get(
+        f"{settings.API_V2_STR}/init_number_pools", params=dict(pool_id=1)
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+
+    resp = client.get(f"{settings.API_V2_STR}/init_number_pools")
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+
+
 def test_endpoint_number_pool_init(client: TestClient) -> None:
     resp, data = page(client)  # without pool, just to set cookies
     resp = client.post(
