@@ -1,5 +1,12 @@
-from typing import Dict, Any
-from pydantic import BaseModel
+from typing import Dict, Any, List
+from pydantic import BaseModel, validator
+
+
+USER_ID_TYPES = {
+    "phone",
+    "email",
+    "session_id",
+}
 
 
 class PageRequestBody(BaseModel):
@@ -26,6 +33,46 @@ class TrackCallRequestBody(BaseModel):
     call_id: str
     call_from: str
     call_to: str
+
+
+class UpdateUserContextRequestBody(BaseModel):
+    key: str
+    user_id: str
+    id_type: str
+    context: Dict[str, Any]
+
+    @validator("id_type")
+    def validate_id_type(cls, v):
+        if v not in USER_ID_TYPES:
+            raise ValueError(f"invalid id_type: {v}")
+        return v
+
+
+class GetUserContextRequestParams(BaseModel):
+    key: str
+    user_id: str
+    id_type: str
+
+    @validator("id_type")
+    def validate_id_type(cls, v):
+        if v not in USER_ID_TYPES:
+            raise ValueError(f"invalid id_type: {v}")
+        return v
+
+
+class GetStaticNumberContextRequestParams(BaseModel):
+    key: str
+    number: str
+
+
+class StaticNumberContext(BaseModel):
+    number: str
+    context: Dict[str, Any]
+
+
+class SetStaticNumberContextsRequestBody(BaseModel):
+    key: str
+    contexts: List[StaticNumberContext]
 
 
 class NumberPoolRequestBody(BaseModel):

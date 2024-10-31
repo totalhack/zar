@@ -103,7 +103,6 @@ async def track(
     _zar_cid: Optional[str] = Cookie(None),
     db: Generator = Depends(deps.get_db),
 ) -> Dict[str, Any]:
-
     body_data = None
     if request.headers["content-type"] == "application/x-www-form-urlencoded":
         body_data = await request.form()
@@ -293,7 +292,7 @@ def track_call(body: TrackCallRequestBody, request: Request) -> Dict[str, Any]:
 
     call_to = body["call_to"].lstrip("+1")
     call_from = body["call_from"].lstrip("+1")
-    number_ctx = pool_api.get_number_context(call_to)
+    number_ctx = pool_api.get_pool_number_context(call_to)
     route_ctx = pool_api.get_cached_route_context(call_from, call_to)
     from_route_cache = False
     ctx = None

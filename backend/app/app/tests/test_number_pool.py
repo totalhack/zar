@@ -38,18 +38,18 @@ def test_pool_update_number():
     num = pool_api.lease_number(DEFAULT_POOL_ID, dict(sid="1"))
     assert num
     print("number:", num)
-    ctx = pool_api.get_number_context(num)
+    ctx = pool_api.get_pool_number_context(num)
     request_context = ctx["request_context"]
     request_context["foo"] = "bar"
     pool_api.update_number(DEFAULT_POOL_ID, num, request_context, merge=True)
-    ctx = pool_api.get_number_context(num)
+    ctx = pool_api.get_pool_number_context(num)
     assert ctx["request_context"]["foo"] == "bar"
 
     # Should fail to update number
     request_context["sid"] = "2"
     request_context["foo"] = "baz"
     pool_api.update_number(DEFAULT_POOL_ID, num, request_context, merge=True)
-    ctx = pool_api.get_number_context(num)
+    ctx = pool_api.get_pool_number_context(num)
     assert ctx["request_context"]["foo"] == "bar"
 
 
@@ -73,14 +73,14 @@ def test_pool_take_expired_number():
 
     new_num = pool_api.lease_number(DEFAULT_POOL_ID, dict(foo="bar"))
     assert num == new_num  # Should take the oldest expired number
-    ctx = pool_api.get_number_context(num)
+    ctx = pool_api.get_pool_number_context(num)
     assert "foo" in ctx.get("request_context", None)
 
 
 def test_pool_max_renewal_time():
     pool_api._reset_pool(DEFAULT_POOL_ID, preserve=False)
     num = pool_api.lease_number(DEFAULT_POOL_ID, {})
-    ctx = pool_api.get_number_context(num)
+    ctx = pool_api.get_pool_number_context(num)
     ctx["leased_at"] = time.time() - 1e6
     pool_api.set_number_context(num, ctx)
     with pytest.raises(NumberMaxRenewalExceeded):
@@ -128,7 +128,7 @@ def test_pool_renew_with_session_id():
     ctx = dict(sid="1234", visits={2: dict(baz="bar")})
     new_num = pool_api.lease_number(DEFAULT_POOL_ID, ctx, target_number=num, renew=True)
     assert new_num == num
-    num_ctx = pool_api.get_number_context(num)
+    num_ctx = pool_api.get_pool_number_context(num)
     assert len(num_ctx["request_context"]["visits"]) == 2
 
     # Retry renewal with SID mismatch, should get random number

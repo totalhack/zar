@@ -2,6 +2,7 @@
 TODO Async db connections: https://github.com/encode/databases
 TODO Check for bots before deps.get_conn
 """
+from functools import wraps
 import time
 from typing import Generator, Dict, Any, Optional
 
@@ -18,6 +19,10 @@ from app.schemas.zar import (
     PageRequestBody,
     TrackRequestBody,
     TrackCallRequestBody,
+    GetUserContextRequestParams,
+    UpdateUserContextRequestBody,
+    GetStaticNumberContextRequestParams,
+    SetStaticNumberContextsRequestBody,
     NumberPoolRequestBody,
     UpdateNumberRequestBody,
 )
@@ -62,6 +67,16 @@ if settings.NUMBER_POOL_ENABLED:
         pool_api = NumberPoolAPI()
     except NumberPoolUnavailable as e:
         warn(str(e))
+
+
+def log_api_response(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        response = func(*args, **kwargs)
+        info(str(response), label=f"{func.__name__}")
+        return response
+
+    return wrapper
 
 
 def get_pool_context(vid, sid, sid_original_referer, context, headers):
@@ -501,7 +516,122 @@ def update_number(
     res = pool_api.update_number(pool_id, number, request_context, merge=True)
 
     info(f"took: {time.time() - start:0.3f}s, {pool_id} / {number}")
+    # NOTE: this is inconsistent with other endpoints that return results in the msg
     return dict(status=NumberPoolResponseStatus.SUCCESS, context=res, msg=None)
+
+
+@router.get("/get_user_context", response_model=Dict[str, Any])
+def get_user_context(
+    request: Request, params: GetUserContextRequestParams = Depends()
+) -> Dict[str, Any]:
+    params = dict(params)
+    key = params.get("key", None)
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if settings.DEBUG:
+        print_request(request.headers, None)
+
+    global pool_api
+    if not pool_api:
+        res = dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
+        )
+        rb_warning(res, request=request)
+        return res
+
+    user_id = params["user_id"]
+    id_type = params["id_type"]
+    ctx = pool_api.get_user_context(id_type, user_id)
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
+
+
+@router.post("/update_user_context", response_model=Dict[str, Any])
+def update_user_context(
+    body: UpdateUserContextRequestBody, request: Request
+) -> Dict[str, Any]:
+    body = dict(body)
+    key = body.get("key", None)
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if settings.DEBUG:
+        print_request(request.headers, body)
+
+    global pool_api
+    if not pool_api:
+        res = dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
+        )
+        rb_warning(res, request=request)
+        return res
+
+    user_id = body["user_id"]
+    id_type = body["id_type"]
+    context = body["context"]
+    ctx = pool_api.update_user_context(id_type, user_id, context)
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
+
+
+@router.get("/get_static_number_context", response_model=Dict[str, Any])
+def get_static_number_context(
+    request: Request, params: GetStaticNumberContextRequestParams = Depends()
+) -> Dict[str, Any]:
+    params = dict(params)
+    key = params.get("key", None)
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if settings.DEBUG:
+        print_request(request.headers, None)
+
+    global pool_api
+    if not pool_api:
+        res = dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
+        )
+        rb_warning(res, request=request)
+        return res
+
+    number = params["number"]
+    ctx = pool_api.get_static_number_context(number)
+    if not ctx:
+        res = dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.NOT_FOUND,
+        )
+        warn(res)
+        return res
+
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
+
+
+@router.post("/set_static_number_contexts", response_model=Dict[str, Any])
+def set_static_number_contexts(
+    body: SetStaticNumberContextsRequestBody, request: Request
+) -> Dict[str, Any]:
+    body = dict(body)
+    key = body.get("key", None)
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if settings.DEBUG:
+        print_request(request.headers, body)
+
+    global pool_api
+    if not pool_api:
+        res = dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
+        )
+        rb_warning(res, request=request)
+        return res
+
+    for ctx in body["contexts"]:
+        number = ctx.number
+        context = ctx.context
+        pool_api.set_static_number_context(number, context)
+
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=None)
 
 
 @router.post("/track_call", response_model=Dict[str, Any])
@@ -528,32 +658,45 @@ def track_call(
 
     call_to = body["call_to"].lstrip("+1")
     call_from = body["call_from"].lstrip("+1")
-    number_ctx = pool_api.get_number_context(call_to)
+    pool_ctx = pool_api.get_pool_number_context(call_to)
     route_ctx = pool_api.get_cached_route_context(call_from, call_to)
+    user_ctx = pool_api.get_user_context("phone", call_from)
     from_route_cache = False
     ctx = None
 
-    if (not number_ctx) and route_ctx:
+    if not (pool_ctx or route_ctx):
+        # Check if this is a static number with context
+        static_ctx = pool_api.get_static_number_context(call_to)
+        if static_ctx:
+            ctx = dict(static_context=static_ctx)
+            if user_ctx:
+                ctx["user_context"] = user_ctx
+            info(f"Found static number context for {call_from}->{call_to}")
+            return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
+
+    if (not pool_ctx) and route_ctx:
         # No active context found for this tracking number but we have a cached
         # context from this user calling this number before.
         ctx = route_ctx
         from_route_cache = True
-    elif number_ctx and not route_ctx:
-        ctx = number_ctx
-    elif number_ctx and route_ctx:
+    elif pool_ctx and not route_ctx:
+        ctx = pool_ctx
+    elif pool_ctx and route_ctx:
         # There is an active context and a cached context. If the SID of number context
         # and route context match, its the same user and we use the updated context.
-        pool_id = number_ctx["pool_id"]
-        number_sid = pool_api._get_session_id(pool_id, number_ctx["request_context"])
+        pool_id = pool_ctx["pool_id"]
+        number_sid = pool_api._get_session_id(pool_id, pool_ctx["request_context"])
         route_sid = pool_api._get_session_id(pool_id, route_ctx["request_context"])
         if number_sid == route_sid:
             # Same session, use direct number ctx since it may be more up to date
-            ctx = number_ctx
+            ctx = pool_ctx
         else:
             # Different session, so likely a different user has this number now. Use
             # the cached route context for this user.
             ctx = route_ctx
             from_route_cache = True
+
+    # TODO: what if there is a user context but not a pool context?
 
     if not ctx:
         res = dict(
@@ -562,6 +705,9 @@ def track_call(
         )
         warn(f"{call_from} -> {call_to}: {res}")
         return res
+
+    if user_ctx:
+        ctx["user_context"] = user_ctx
 
     pool_api.set_cached_route_context(call_from, call_to, ctx)
 

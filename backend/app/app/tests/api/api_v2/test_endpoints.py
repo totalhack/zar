@@ -224,9 +224,9 @@ SAMPLE_TRACK_CALL_REQUEST = {
 
 
 def test_endpoint_call_track_error(client: TestClient) -> None:
-    resp = client.post(
-        f"{settings.API_V2_STR}/track_call", json=SAMPLE_TRACK_CALL_REQUEST
-    )
+    ctx = SAMPLE_TRACK_CALL_REQUEST.copy()
+    ctx["call_to"] = "1234567890"
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=ctx)
     assert resp.status_code == 200
     data = resp.json()
     pp(data)
@@ -247,6 +247,14 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
     number = data["number"]
 
+    # Add user context that should get returned later
+    user_request = SAMPLE_USER_CONTEXT_REQUEST.copy()
+    user_request["user_id"] = SAMPLE_TRACK_CALL_REQUEST["call_from"]
+    resp = client.post(f"{settings.API_V2_STR}/update_user_context", json=user_request)
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+
     track_call_req = SAMPLE_TRACK_CALL_REQUEST.copy()
     track_call_req["call_to"] = number
     pp(track_call_req)
@@ -256,6 +264,7 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+    assert data.get("msg", {}).get("user_context", None)
 
     # route context should come into play on this one
     resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
@@ -263,3 +272,68 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+
+
+SAMPLE_USER_CONTEXT_REQUEST = {
+    "key": "abc",
+    "user_id": "4015735878",
+    "id_type": "phone",
+    "context": {"foo": "bar", "baz": "bar"},
+}
+
+
+def test_endpoint_update_user_context(client: TestClient) -> None:
+    resp = client.post(
+        f"{settings.API_V2_STR}/update_user_context", json=SAMPLE_USER_CONTEXT_REQUEST
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+
+    params = dict(
+        key=SAMPLE_USER_CONTEXT_REQUEST["key"],
+        user_id=SAMPLE_USER_CONTEXT_REQUEST["user_id"],
+        id_type=SAMPLE_USER_CONTEXT_REQUEST["id_type"],
+    )
+    resp = client.get(f"{settings.API_V2_STR}/get_user_context", params=params)
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+
+
+SAMPLE_STATIC_NUMBER_CONTEXT_REQUEST = {
+    "key": "abc",
+    "contexts": [
+        {
+            "number": "5551237777",
+            "context": {"test": "1"},
+        }
+    ],
+}
+
+
+def test_endpoint_set_static_number_contexts(client: TestClient) -> None:
+    resp = client.post(
+        f"{settings.API_V2_STR}/set_static_number_contexts",
+        json=SAMPLE_STATIC_NUMBER_CONTEXT_REQUEST,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+
+    first_number = SAMPLE_STATIC_NUMBER_CONTEXT_REQUEST["contexts"][0]["number"]
+    params = dict(key=SAMPLE_USER_CONTEXT_REQUEST["key"], number=first_number)
+    resp = client.get(f"{settings.API_V2_STR}/get_static_number_context", params=params)
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+
+    track_call_req = SAMPLE_TRACK_CALL_REQUEST.copy()
+    track_call_req["call_to"] = first_number
+    pp(track_call_req)
+
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+    assert resp.status_code == 200
+    data = resp.json()
+    pp(data)
+    assert data.get("msg", {}).get("static_context", None)

@@ -33,6 +33,7 @@ NUMBER_POOL_CACHE_EXPIRATION = 5 * MINUTES
 NUMBER_POOL_MAX_RENEWAL_AGE = 7 * DAYS
 # How long we keep call_from -> call_to route contexts cached
 NUMBER_POOL_ROUTE_CACHE_EXPIRATION = 30 * DAYS
+NUMBER_POOL_USER_CONTEXT_EXPIRATION = 14 * DAYS
 
 LOCK_WAIT_TIMEOUT = 5
 LOCK_HOLD_TIMEOUT = 5
@@ -205,7 +206,7 @@ class NumberPoolAPI:
     def refresh_conn(self, conn_tries=NUMBER_POOL_CONNECT_TRIES):
         self.conn = get_number_pool_conn(tries=conn_tries, refresh=True)
 
-    def get_number_context(self, number, with_age=False):
+    def get_pool_number_context(self, number, with_age=False):
         res = self.conn.get(number)
         res = json.loads(res) if res else None
         if res and with_age:
@@ -220,7 +221,7 @@ class NumberPoolAPI:
         self.conn.set(number, context.json())
 
     def get_number_status(self, number, with_age=False):
-        res = self.get_number_context(number, with_age=with_age)
+        res = self.get_pool_number_context(number, with_age=with_age)
         if not res:
             return NumberStatus.FREE, None
         if self._number_context_expired(res):
@@ -239,6 +240,38 @@ class NumberPoolAPI:
         key = self.get_cached_route_key(call_from, call_to)
         res = self.conn.get(key)
         return json.loads(res) if res else None
+
+    def get_user_context_key(self, id_type, user_id):
+        return f"{id_type}:{user_id}"
+
+    def get_user_context(self, id_type, user_id):
+        key = self.get_user_context_key(id_type, user_id)
+        res = self.conn.get(key)
+        return json.loads(res) if res else None
+
+    def set_user_context(self, id_type, user_id, context):
+        key = self.get_user_context_key(id_type, user_id)
+        self.conn.set(key, json.dumps(context), ex=NUMBER_POOL_USER_CONTEXT_EXPIRATION)
+
+    def update_user_context(self, id_type, user_id, context):
+        current_ctx = self.get_user_context(id_type, user_id)
+        if current_ctx:
+            # Second arg overwrites first on conflict
+            context = dictmerge(current_ctx, context, overwrite=True)
+        self.set_user_context(id_type, user_id, context)
+        return context
+
+    def get_static_number_key(self, number):
+        return f"static:{number}"
+
+    def get_static_number_context(self, number):
+        key = self.get_static_number_key(number)
+        res = self.conn.get(key)
+        return json.loads(res) if res else None
+
+    def set_static_number_context(self, number, context):
+        key = self.get_static_number_key(number)
+        self.conn.set(key, json.dumps(context))
 
     def get_all_pool_stats(self, with_contexts=False):
         stats = {}
@@ -437,7 +470,7 @@ class NumberPoolAPI:
     def _get_number_contexts(self, numbers, with_age=False):
         res = {}
         for number in numbers:
-            res[number] = self.get_number_context(number, with_age=with_age)
+            res[number] = self.get_pool_number_context(number, with_age=with_age)
         return res
 
     def _create_number_context(self, pool_id, request_context):
@@ -515,7 +548,7 @@ class NumberPoolAPI:
         # remove session -> number mappings
         sids = []
         for number in numbers:
-            ctx = self.get_number_context(number)
+            ctx = self.get_pool_number_context(number)
             if not ctx:
                 continue
             sids.append(self._get_session_id(pool_id, ctx["request_context"]))
@@ -539,7 +572,7 @@ class NumberPoolAPI:
         """Expected to be called with a number that is 'taken'"""
         dbg(f"Renewing number {pool_id}/{number}")
 
-        curr_context = self.get_number_context(number)
+        curr_context = self.get_pool_number_context(number)
         raiseif(curr_context is None, "Trying to renew inactive number")
         if not context:
             warn(f"No context provided, using number {number} context")
@@ -609,7 +642,7 @@ class NumberPoolAPI:
             status == NumberStatus.TAKEN,
             f"Trying to set renewed_at on number with invalid status: {status}",
         )
-        ctx = self.get_number_context(number)
+        ctx = self.get_pool_number_context(number)
         ctx["renewed_at"] = renewed_at
         self.set_number_context(number, ctx)
 
