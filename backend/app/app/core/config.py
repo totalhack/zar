@@ -39,6 +39,8 @@ class Settings(BaseSettings):
 
     ALLOW_BOTS: bool = False
 
+    SESSION_RESET_PARAM: str = None
+
     class Config:
         case_sensitive = True
 

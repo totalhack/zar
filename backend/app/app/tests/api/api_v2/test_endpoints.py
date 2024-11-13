@@ -12,11 +12,11 @@ SAMPLE_PAGE_REQUEST = {
     "type": "page",
     "properties": {
         "title": "Page One",
-        "url": "http://localhost:8080/one",
+        "url": "http://localhost:8080/one?s=1",
         "pool_id": None,
         "width": 1680,
         "height": 619,
-        "referrer": "http://localhost:8080/one",
+        "referrer": "http://example.com",
         "zar": {
             "vid": {
                 "id": "kgwevbe3.ryqmjkrahew",
@@ -65,8 +65,31 @@ def reset_pool(client):
     assert resp.status_code == 200
 
 
-def test_endpoint_page(client: TestClient) -> None:
-    page(client)
+def test_endpoint_page_v2(client: TestClient) -> None:
+    resp, data = page(client)
+    sid1 = data["sid"]
+
+    resp, data = page(client)
+    sid2 = data["sid"]
+    assert sid1 == sid2
+
+    req = SAMPLE_PAGE_REQUEST.copy()
+    # URL with new s= param should trigger a new session
+    req["properties"]["url"] = "http://localhost:8080/one?s=2"
+    resp, data = page(client, req=req)
+    sid3 = data["sid"]
+    assert sid1 != sid3
+
+    # Same s= value, should not trigger a new session
+    resp, data = page(client, req=req)
+    sid4 = data["sid"]
+    assert sid3 == sid4
+
+    # URL with no s= param, should not trigger a new session
+    req["properties"]["url"] = "http://localhost:8080/other"
+    resp, data = page(client, req=req)
+    sid5 = data["sid"]
+    assert sid5 == sid4
 
 
 def test_endpoint_number_via_page(client: TestClient) -> None:

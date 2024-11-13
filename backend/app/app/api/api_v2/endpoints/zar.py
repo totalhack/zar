@@ -254,8 +254,17 @@ def page(
         headers["document_referrer"] = body["properties"]["referrer"]
 
     zar = body["properties"].get("zar", {}) or {}
-    zar = get_zar_dict(zar, headers, sid_cookie=_zar_sid, cid_cookie=_zar_cid)
+    zar = get_zar_dict(
+        zar,
+        headers,
+        sid_cookie=_zar_sid,
+        cid_cookie=_zar_cid,
+        url=body["properties"].get("url", None),
+    )
     vid, sid, cid = get_zar_ids(zar)
+
+    if zar.get("session_reset", False):
+        _zar_pool = None
 
     pool_data = None
     try:

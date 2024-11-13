@@ -1,6 +1,6 @@
 import random
 import time
-from urllib.parse import urlparse, quote, unquote
+from urllib.parse import parse_qs, urlparse, quote, unquote
 import uuid
 
 from tlbx import pp, st, json, raiseifnot
@@ -90,15 +90,24 @@ def create_vid_dict(id=None, t=None, headers=None):
     origReferrer = get_orig_referrer(headers)
     t = t or int(time.time_ns() // 1e6)
     return dict(
-        id=id or create_vid(), isNew=True, visits=1, origReferrer=origReferrer, t=t
+        id=id or create_vid(),
+        isNew=True,
+        visits=1,
+        origReferrer=origReferrer,
+        t=t,
     )
 
 
-def create_id_dict(id=None, t=None, headers=None):
+def create_id_dict(id=None, t=None, headers=None, reset_param_value=None):
     origReferrer = get_orig_referrer(headers)
     t = t or int(time.time_ns() // 1e6)
     return dict(
-        id=id or create_zar_id(), isNew=True, visits=1, origReferrer=origReferrer, t=t
+        id=id or create_zar_id(),
+        isNew=True,
+        visits=1,
+        origReferrer=origReferrer,
+        t=t,
+        resetParamValue=reset_param_value,
     )
 
 
@@ -119,7 +128,7 @@ def get_zar_ids(zar):
     return vid, sid, cid
 
 
-def handle_zar_id_cookie(zar, cookie, key, headers, t=None):
+def handle_zar_id_cookie(zar, cookie, key, headers, t=None, reset_param_value=None):
     raiseifnot(cookie, f"Expected cookie value, got: {cookie}")
 
     # We moved to JSON format, but need to handle old case too
@@ -130,26 +139,62 @@ def handle_zar_id_cookie(zar, cookie, key, headers, t=None):
             zar[key]["id"] = cookie
             zar[key]["cookie_mismatch"] = True
         else:
-            zar[key] = create_id_dict(id=cookie, t=t, headers=headers)
+            zar[key] = create_id_dict(
+                id=cookie, t=t, headers=headers, reset_param_value=reset_param_value
+            )
     return zar
 
 
-def get_zar_dict(zar, headers, sid_cookie=None, cid_cookie=None, create=True):
+def get_zar_dict(zar, headers, sid_cookie=None, cid_cookie=None, create=True, url=None):
     zar = zar or {}
     t = int(time.time_ns() // 1e6)
+    reset_param_value = None
+
+    if settings.SESSION_RESET_PARAM and url:
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+        reset_param_value = qs.get(settings.SESSION_RESET_PARAM, None)
+        reset_param_value = reset_param_value[0] if reset_param_value else None
 
     if create and "vid" not in zar:
         zar["vid"] = create_vid_dict(t=t, headers=headers)
 
     if sid_cookie:
-        handle_zar_id_cookie(zar, sid_cookie, "sid", headers, t=t)
+        handle_zar_id_cookie(
+            zar, sid_cookie, "sid", headers, t=t, reset_param_value=reset_param_value
+        )
     elif create and "sid" not in zar:
-        zar["sid"] = create_id_dict(t=t, headers=headers)
+        zar["sid"] = create_id_dict(
+            t=t, headers=headers, reset_param_value=reset_param_value
+        )
 
     if cid_cookie:
-        handle_zar_id_cookie(zar, cid_cookie, "cid", headers, t=t)
+        handle_zar_id_cookie(
+            zar, cid_cookie, "cid", headers, t=t, reset_param_value=reset_param_value
+        )
     elif create and "cid" not in zar:
-        zar["cid"] = create_id_dict(t=t, headers=headers)
+        zar["cid"] = create_id_dict(
+            t=t, headers=headers, reset_param_value=reset_param_value
+        )
+
+    zar["session_reset"] = False
+    if (
+        reset_param_value
+        and sid_cookie
+        and zar["sid"].get("resetParamValue", None)
+        and reset_param_value != zar["sid"].get("resetParamValue", None)
+    ):
+        # Force a new session and clear our stale info
+        _, old_sid, _ = get_zar_ids(zar)
+        zar["sid"] = create_id_dict(
+            t=t, headers=headers, reset_param_value=reset_param_value
+        )
+        zar["cid"] = create_id_dict(
+            t=t, headers=headers, reset_param_value=reset_param_value
+        )
+        _, new_sid, _ = get_zar_ids(zar)
+        zar["session_reset"] = True
+        warn(f"Reset session for {old_sid} -> {new_sid}")
 
     return zar
 

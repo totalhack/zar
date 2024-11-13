@@ -1,9 +1,8 @@
 services:
-      
   backend:
-    image: '${DOCKER_IMAGE_BACKEND}:${TAG-latest}'
+    image: "${DOCKER_IMAGE_BACKEND}:${TAG-latest}"
     ports:
-      - "80:80" 
+      - "80:80"
     env_file:
       - .env
     environment:
@@ -20,6 +19,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - NUMBER_POOL_ENABLED=${NUMBER_POOL_ENABLED-false}
       - NUMBER_POOL_KEY=${NUMBER_POOL_KEY}
+      - SESSION_RESET_PARAM=${SESSION_RESET_PARAM}
     logging:
       driver: awslogs
       options:
