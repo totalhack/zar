@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Zillion Analytics Recorder",
   "publishConfig": {
     "access": "public"
