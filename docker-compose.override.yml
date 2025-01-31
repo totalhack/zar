@@ -1,5 +1,4 @@
 services:
-
   db:
     image: mysql:5.7.42
     ports:
@@ -18,7 +17,7 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - "80:80" 
+      - "80:80"
     depends_on:
       - db
       - redis
@@ -45,10 +44,9 @@ services:
 
   redis:
     image: "redis:alpine"
-    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory 512mb --maxmemory-policy allkeys-lru --save "" --appendonly no
     ports:
       - "6379"
 
 volumes:
   app-db-data:
-
