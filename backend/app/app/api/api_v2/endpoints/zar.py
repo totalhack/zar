@@ -2,6 +2,7 @@
 TODO Async db connections: https://github.com/encode/databases
 TODO Check for bots before deps.get_conn
 """
+
 from functools import wraps
 import time
 from typing import Generator, Dict, Any, Optional
@@ -680,7 +681,7 @@ def track_call(
             ctx = dict(static_context=static_ctx)
             if user_ctx:
                 ctx["user_context"] = user_ctx
-            info(f"Found static number context for {call_from}->{call_to}")
+            info(f"{call_from} -> {call_to}: found static number context")
             return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
 
     if (not pool_ctx) and route_ctx:
@@ -705,14 +706,17 @@ def track_call(
             ctx = route_ctx
             from_route_cache = True
 
-    # TODO: what if there is a user context but not a pool context?
-
     if not ctx:
-        res = dict(
-            status=NumberPoolResponseStatus.ERROR,
-            msg=NumberPoolResponseMessages.NOT_FOUND,
-        )
-        warn(f"{call_from} -> {call_to}: {res}")
+        if user_ctx:
+            ctx = dict(user_context=user_ctx)
+            res = dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
+            warn(f"{call_from} -> {call_to}: only found user context")
+        else:
+            res = dict(
+                status=NumberPoolResponseStatus.ERROR,
+                msg=NumberPoolResponseMessages.NOT_FOUND,
+            )
+            warn(f"{call_from} -> {call_to}: {res}")
         return res
 
     if user_ctx:
