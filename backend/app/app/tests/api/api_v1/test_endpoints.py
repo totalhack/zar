@@ -49,7 +49,7 @@ SAMPLE_PAGE_REQUEST = {
 
 def test_endpoint_page(client: TestClient) -> None:
     resp = client.post(f"{settings.API_V1_STR}/page", json=SAMPLE_PAGE_REQUEST)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("id", None)
@@ -96,7 +96,7 @@ SAMPLE_TRACK_REQUEST = {
 
 def test_endpoint_track(client: TestClient) -> None:
     resp = client.post(f"{settings.API_V1_STR}/track", json=SAMPLE_TRACK_REQUEST)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("id", None)
@@ -146,7 +146,7 @@ def test_endpoint_number_pool(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V1_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -164,7 +164,7 @@ def test_endpoint_call_track_error(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V1_STR}/track_call", json=SAMPLE_TRACK_CALL_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     # We didn't create a number context so this should respond with an error
@@ -176,12 +176,12 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
         f"{settings.API_V1_STR}/reset_pool",
         params=dict(key="abc", pool_id=1, preserve=False),
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
 
     resp = client.post(
         f"{settings.API_V1_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -192,15 +192,14 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     pp(track_call_req)
 
     resp = client.post(f"{settings.API_V1_STR}/track_call", json=track_call_req)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
 
     # route context should come into play on this one
     resp = client.post(f"{settings.API_V1_STR}/track_call", json=track_call_req)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
-

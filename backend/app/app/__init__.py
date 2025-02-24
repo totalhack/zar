@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import typing
 
 from fastapi import FastAPI
@@ -7,6 +8,7 @@ import uvicorn.protocols.utils
 
 from app.core.config import settings
 from app.core.logging import default_logger, dbg, info, warn, error
+from app.db.session import database
 from app.utils import extract_header_params
 
 
@@ -41,10 +43,21 @@ class ORJSONResponse(JSONResponse):
         return orjson.dumps(content, option=orjson.OPT_NON_STR_KEYS)
 
 
+@asynccontextmanager
+async def lifespan(app):
+    await database.connect()
+    print("FastAPI app started with async database connection")
+    try:
+        yield  # Hand control to the app
+    finally:
+        await database.disconnect()
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.ENABLE_DOCS else None,
     docs_url=None,  # Swagger docs
     redoc_url="/docs" if settings.ENABLE_DOCS else None,  # redocs
     default_response_class=ORJSONResponse,
+    lifespan=lifespan,
 )

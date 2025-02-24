@@ -1,6 +1,5 @@
 import traceback as tb
 
-from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -25,7 +24,10 @@ async def catch_exceptions_middleware(request: Request, call_next):
     except Exception as e:
         tb.print_exc()
         if settings.ROLLBAR_ENABLED:
-            rollbar.report_exc_info()
+            if "JSONDecodeError" in str(e):
+                rollbar.report_message(str(e), "warning")
+            else:
+                rollbar.report_exc_info()
         if settings.DEBUG:
             return Response(tb.format_exc(), status_code=500, media_type="text/plain")
         return Response(

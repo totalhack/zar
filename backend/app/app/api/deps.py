@@ -1,9 +1,9 @@
-from typing import Generator
+from typing import Generator, AsyncGenerator
 
 from fastapi import HTTPException, Request
 from tlbx import json, st, warn
 
-from app.db.session import SessionLocal, engine
+from app.db.session import database, SessionLocal
 
 
 def get_db() -> Generator:
@@ -14,12 +14,9 @@ def get_db() -> Generator:
         db.close()
 
 
-def get_conn() -> Generator:
-    try:
-        conn = engine.connect()
+async def get_conn() -> AsyncGenerator:
+    async with database.connection() as conn:
         yield conn
-    finally:
-        conn.close()
 
 
 # For use in sync endpoints: https://github.com/tiangolo/fastapi/issues/393#issuecomment-584408572

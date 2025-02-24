@@ -1,11 +1,10 @@
 """
-TODO Async db connections: https://github.com/encode/databases
 TODO Check for bots before deps.get_conn
 """
 
 from functools import wraps
 import time
-from typing import Generator, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
 from fastapi.responses import JSONResponse
@@ -213,7 +212,7 @@ def handle_pool_request(zar, props, cookie, headers, request, response):
     pool_resp = get_pool_number(
         pool_api, pool_id, request_context, number=pool_number, request=request
     )
-    info(f"{sid}: {pool_resp}")
+    dbg(f"{sid}: {pool_resp}")
 
     # NOTE: numeric pool IDs get coerced to str in json.dumps, so we need to
     # to read and write as str when dealing with the cookie value.
@@ -225,19 +224,19 @@ def handle_pool_request(zar, props, cookie, headers, request, response):
     max_age = props.get("pool_max_age", POOL_COOKIE_MAX_AGE)
     set_pool_cookie(response, pool_sesh, headers, max_age=max_age)
 
-    info(f"took: {time.time() - start:0.3f}s")
+    dbg(f"took: {time.time() - start:0.3f}s")
     return pool_resp
 
 
 @router.post("/page", response_model=Dict[str, Any])
-def page(
+async def page(
     body: PageRequestBody,
     request: Request,
     response: Response,
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
     _zar_pool: Optional[str] = Cookie(None),
-    conn: Generator = Depends(deps.get_conn),
+    conn=Depends(deps.get_conn),
 ) -> Dict[str, Any]:
     start = time.time()
     body = dict(body)
@@ -287,8 +286,7 @@ def page(
         referer=headers["referer"],
         properties=json.dumps(body["properties"]),
     )
-    res = conn.execute(stmt)
-    pk = res.inserted_primary_key[0] if res.inserted_primary_key else None
+    pk = await conn.execute(query=stmt)
 
     response.set_cookie(
         **zar_cookie_params(
@@ -311,11 +309,11 @@ def page(
 
 
 @router.post("/track", response_model=Dict[str, Any])
-def track(
+async def track(
     request: Request,
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
-    conn: Generator = Depends(deps.get_conn),
+    conn=Depends(deps.get_conn),
     body_data: dict = Depends(deps.get_body_data),
 ):
     start = time.time()
@@ -364,24 +362,24 @@ def track(
         referer=headers["referer"],
         properties=json.dumps(body["properties"]),
     )
-    res = conn.execute(stmt)
+    pk = await conn.execute(query=stmt)
 
     dbg(f"took: {time.time() - start:0.3f}s")
     if text_response:
         # Assume it was a beacon call
         return Response(status_code=HTTP_204_NO_CONTENT)
 
-    pk = res.inserted_primary_key[0] if res.inserted_primary_key else None
+    # pk = res.inserted_primary_key[0] if res.inserted_primary_key else None
     resp = dict(id=pk)
     return JSONResponse(content=resp)
 
 
 @router.get("/noscript", response_model=Dict[str, Any])
-def noscript(
+async def noscript(
     request: Request,
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
-    conn: Generator = Depends(deps.get_conn),
+    conn=Depends(deps.get_conn),
 ) -> Dict[str, Any]:
     if settings.DEBUG:
         print_request(request.headers, None)
@@ -408,8 +406,7 @@ def noscript(
         referer=headers["referer"],
         properties=json.dumps(props),
     )
-    res = conn.execute(stmt)
-    pk = res.inserted_primary_key[0] if res.inserted_primary_key else None
+    pk = await conn.execute(query=stmt)
     return dict(id=pk)
 
 
@@ -645,10 +642,10 @@ def set_static_number_contexts(
 
 
 @router.post("/track_call", response_model=Dict[str, Any])
-def track_call(
+async def track_call(
     body: TrackCallRequestBody,
     request: Request,
-    conn: Generator = Depends(deps.get_conn),
+    conn=Depends(deps.get_conn),
 ) -> Dict[str, Any]:
     body = dict(body)
     key = body.get("key", None)
@@ -735,7 +732,7 @@ def track_call(
     )
 
     try:
-        conn.execute(insert_stmt)
+        await conn.execute(query=insert_stmt)
     except Exception as e:
         rb_error(f"Failed to save TrackCall record: {str(e)}", request=request)
         return dict(

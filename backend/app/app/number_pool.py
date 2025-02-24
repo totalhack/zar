@@ -218,7 +218,7 @@ class NumberPoolAPI:
     def set_number_context(self, number, context):
         dbg(f"{number}: {context}")
         context = NumberPoolCacheValue(**context)
-        self.conn.set(number, context.json())
+        self.conn.set(number, context.model_dump_json())
 
     def get_number_status(self, number, with_age=False):
         res = self.get_pool_number_context(number, with_age=with_age)
@@ -234,7 +234,9 @@ class NumberPoolAPI:
     def set_cached_route_context(self, call_from, call_to, context):
         context = NumberPoolCacheValue(**context)
         key = self.get_cached_route_key(call_from, call_to)
-        self.conn.set(key, context.json(), ex=NUMBER_POOL_ROUTE_CACHE_EXPIRATION)
+        self.conn.set(
+            key, context.model_dump_json(), ex=NUMBER_POOL_ROUTE_CACHE_EXPIRATION
+        )
 
     def get_cached_route_context(self, call_from, call_to):
         key = self.get_cached_route_key(call_from, call_to)

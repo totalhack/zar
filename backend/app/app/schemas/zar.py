@@ -1,5 +1,5 @@
-from typing import Dict, Any, List
-from pydantic import BaseModel, validator
+from typing import Dict, Any, List, Union
+from pydantic import BaseModel, Field, field_validator
 
 
 USER_ID_TYPES = {
@@ -11,21 +11,21 @@ USER_ID_TYPES = {
 
 class PageRequestBody(BaseModel):
     type: str
-    anonymousId: str = None
-    userId: str = None
-    properties: Dict[str, Any] = None
-    options: Dict[str, Any] = None
-    meta: Dict[str, Any] = None
+    anonymousId: Union[str, None] = Field(default=None)
+    userId: Union[str, None] = Field(default=None)
+    properties: Union[Dict[str, Any], None] = Field(default=None)
+    options: Union[Dict[str, Any], None] = Field(default=None)
+    meta: Union[Dict[str, Any], None] = Field(default=None)
 
 
 class TrackRequestBody(BaseModel):
     type: str
     event: str
-    anonymousId: str = None
-    userId: str = None
-    properties: Dict[str, Any] = None
-    options: Dict[str, Any] = None
-    meta: Dict[str, Any] = None
+    anonymousId: Union[str, None] = Field(default=None)
+    userId: Union[str, None] = Field(default=None)
+    properties: Union[Dict[str, Any], None] = Field(default=None)
+    options: Union[Dict[str, Any], None] = Field(default=None)
+    meta: Union[Dict[str, Any], None] = Field(default=None)
 
 
 class TrackCallRequestBody(BaseModel):
@@ -41,7 +41,7 @@ class UpdateUserContextRequestBody(BaseModel):
     id_type: str
     context: Dict[str, Any]
 
-    @validator("id_type")
+    @field_validator("id_type")
     def validate_id_type(cls, v):
         if v not in USER_ID_TYPES:
             raise ValueError(f"invalid id_type: {v}")
@@ -53,7 +53,7 @@ class GetUserContextRequestParams(BaseModel):
     user_id: str
     id_type: str
 
-    @validator("id_type")
+    @field_validator("id_type")
     def validate_id_type(cls, v):
         if v not in USER_ID_TYPES:
             raise ValueError(f"invalid id_type: {v}")
@@ -77,24 +77,24 @@ class SetStaticNumberContextsRequestBody(BaseModel):
 
 class NumberPoolRequestBody(BaseModel):
     pool_id: int
-    number: str = None
-    context: Dict[str, Any] = None
-    properties: Dict[str, Any] = None
-    options: Dict[str, Any] = None
-    meta: Dict[str, Any] = None
+    number: Union[str, None] = Field(default=None)
+    context: Union[Dict[str, Any], None] = Field(default=None)
+    properties: Union[Dict[str, Any], None] = Field(default=None)
+    options: Union[Dict[str, Any], None] = Field(default=None)
+    meta: Union[Dict[str, Any], None] = Field(default=None)
 
 
 class UpdateNumberRequestBody(BaseModel):
     pool_id: int
     number: str
     context: Dict[str, Any]
-    properties: Dict[str, Any] = None
-    options: Dict[str, Any] = None
-    meta: Dict[str, Any] = None
+    properties: Union[Dict[str, Any], None] = Field(default=None)
+    options: Union[Dict[str, Any], None] = Field(default=None)
+    meta: Union[Dict[str, Any], None] = Field(default=None)
 
 
 class NumberPoolCacheValue(BaseModel):
     pool_id: int
     leased_at: float
     renewed_at: float
-    request_context: Dict[str, Any] = None
+    request_context: Union[Dict[str, Any], None] = Field(default=None)

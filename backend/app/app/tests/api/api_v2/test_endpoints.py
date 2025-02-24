@@ -36,7 +36,7 @@ SAMPLE_PAGE_REQUEST = {
 
 def page(client, req=SAMPLE_PAGE_REQUEST):
     resp = client.post(f"{settings.API_V2_STR}/page", json=req)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("id", None)
@@ -62,7 +62,7 @@ def reset_pool(client):
         f"{settings.API_V2_STR}/reset_pool",
         params=dict(key="abc", pool_id=1, preserve=False),
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
 
 
 def test_endpoint_page_v2(client: TestClient) -> None:
@@ -124,9 +124,9 @@ SAMPLE_TRACK_REQUEST = {
 }
 
 
-def test_endpoint_track(client: TestClient) -> None:
+def test_endpoint_track_v2(client: TestClient) -> None:
     resp = client.post(f"{settings.API_V2_STR}/track", json=SAMPLE_TRACK_REQUEST)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("id", None)
@@ -162,13 +162,13 @@ def test_endpoint_init_number_pools(client: TestClient) -> None:
     resp = client.get(
         f"{settings.API_V2_STR}/init_number_pools", params=dict(pool_id=1)
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
 
     resp = client.get(f"{settings.API_V2_STR}/init_number_pools")
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -179,7 +179,7 @@ def test_endpoint_number_pool_init(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -189,7 +189,7 @@ def test_endpoint_number_pool_no_sid(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert (
@@ -203,7 +203,7 @@ def test_endpoint_number_pool_update(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -232,7 +232,7 @@ def test_endpoint_number_session_expired(client: TestClient) -> None:
     req = SAMPLE_NUMBER_POOL_REQUEST.copy()
     req["number"] = data["pool_data"]["number"]
     resp = client.post(f"{settings.API_V2_STR}/number_pool", json=req)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data["status"] == NumberPoolResponseStatus.ERROR and data["msg"] == "expired"
@@ -250,7 +250,7 @@ def test_endpoint_call_track_error(client: TestClient) -> None:
     ctx = SAMPLE_TRACK_CALL_REQUEST.copy()
     ctx["call_to"] = "1234567890"
     resp = client.post(f"{settings.API_V2_STR}/track_call", json=ctx)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     # We didn't create a number context so this should respond with an error
@@ -264,7 +264,7 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -274,7 +274,7 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     user_request = SAMPLE_USER_CONTEXT_REQUEST.copy()
     user_request["user_id"] = SAMPLE_TRACK_CALL_REQUEST["call_from"]
     resp = client.post(f"{settings.API_V2_STR}/update_user_context", json=user_request)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
 
@@ -283,7 +283,7 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     pp(track_call_req)
 
     resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -291,7 +291,7 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
 
     # route context should come into play on this one
     resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
@@ -309,7 +309,7 @@ def test_endpoint_update_user_context(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V2_STR}/update_user_context", json=SAMPLE_USER_CONTEXT_REQUEST
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
 
@@ -319,7 +319,7 @@ def test_endpoint_update_user_context(client: TestClient) -> None:
         id_type=SAMPLE_USER_CONTEXT_REQUEST["id_type"],
     )
     resp = client.get(f"{settings.API_V2_STR}/get_user_context", params=params)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
 
@@ -340,14 +340,14 @@ def test_endpoint_set_static_number_contexts(client: TestClient) -> None:
         f"{settings.API_V2_STR}/set_static_number_contexts",
         json=SAMPLE_STATIC_NUMBER_CONTEXT_REQUEST,
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
 
     first_number = SAMPLE_STATIC_NUMBER_CONTEXT_REQUEST["contexts"][0]["number"]
     params = dict(key=SAMPLE_USER_CONTEXT_REQUEST["key"], number=first_number)
     resp = client.get(f"{settings.API_V2_STR}/get_static_number_context", params=params)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
 
@@ -356,7 +356,7 @@ def test_endpoint_set_static_number_contexts(client: TestClient) -> None:
     pp(track_call_req)
 
     resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     pp(data)
     assert data.get("msg", {}).get("static_context", None)
