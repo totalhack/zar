@@ -45,6 +45,21 @@ def page(client, req=SAMPLE_PAGE_REQUEST):
     return resp, data
 
 
+def test_options_request_page(client: TestClient) -> None:
+    resp = client.options(
+        f"{settings.API_V2_STR}/page",
+        headers={
+            "Origin": "http://localhost",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert "access-control-allow-methods" in resp.headers, resp.headers
+    allowed_methods = resp.headers["access-control-allow-methods"]
+    assert "POST" in allowed_methods
+    assert "OPTIONS" in allowed_methods
+
+
 def page_with_pool(client, pool_id=1, max_age=None):
     req = SAMPLE_PAGE_REQUEST.copy()
     req["properties"]["pool_id"] = pool_id

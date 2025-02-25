@@ -40,10 +40,18 @@ app.middleware("http")(catch_exceptions_middleware)
 
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
-    print("Allowing origins: %s" % settings.BACKEND_CORS_ORIGINS)
+    allowed_origins = set()
+    for origin in settings.BACKEND_CORS_ORIGINS:
+        allowed_origins.add(str(origin))
+        if not str(origin).endswith("/"):
+            allowed_origins.add(str(origin) + "/")
+        else:
+            allowed_origins.add(str(origin)[:-1])
+    allowed_origins = list(allowed_origins)
+    print("Allowing origins: %s" % allowed_origins)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
