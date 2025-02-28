@@ -1,3 +1,4 @@
+from json import JSONDecodeError
 import traceback as tb
 
 from starlette.middleware.cors import CORSMiddleware
@@ -24,7 +25,7 @@ async def catch_exceptions_middleware(request: Request, call_next):
     except Exception as e:
         tb.print_exc()
         if settings.ROLLBAR_ENABLED:
-            if "JSONDecodeError" in str(e):
+            if isinstance(e, JSONDecodeError) or "JSONDecodeError" in str(e):
                 rollbar.report_message(str(e), "warning")
             else:
                 rollbar.report_exc_info()

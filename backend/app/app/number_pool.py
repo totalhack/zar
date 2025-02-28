@@ -19,7 +19,7 @@ from tlbx import (
 
 from app.core.config import settings
 from app.db.session import engine
-from app.schemas.zar import NumberPoolCacheValue
+from app.schemas.zar import NumberPoolCacheValue, UserIDTypes
 
 
 MINUTES = 60
@@ -39,6 +39,12 @@ LOCK_WAIT_TIMEOUT = 5
 LOCK_HOLD_TIMEOUT = 5
 INIT_LOCK_TIMEOUT = 2
 POOL_SESSION_KEY = "sid"
+
+IGNORED_USER_CONTEXT_CALLER_IDS = {
+    # Don't cache user context for these...
+    "anonymous",
+    "266696687",
+}
 
 
 class NumberPoolUnavailable(Exception):
@@ -247,11 +253,21 @@ class NumberPoolAPI:
         return f"{id_type}:{user_id}"
 
     def get_user_context(self, id_type, user_id):
+        if (
+            id_type == UserIDTypes.PHONE
+            and user_id.lower().lstrip("+") in IGNORED_USER_CONTEXT_CALLER_IDS
+        ):
+            return None
         key = self.get_user_context_key(id_type, user_id)
         res = self.conn.get(key)
         return json.loads(res) if res else None
 
     def set_user_context(self, id_type, user_id, context):
+        if (
+            id_type == UserIDTypes.PHONE
+            and user_id.lower().lstrip("+") in IGNORED_USER_CONTEXT_CALLER_IDS
+        ):
+            return
         key = self.get_user_context_key(id_type, user_id)
         self.conn.set(key, json.dumps(context), ex=NUMBER_POOL_USER_CONTEXT_EXPIRATION)
 

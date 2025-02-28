@@ -1,12 +1,13 @@
 from typing import Dict, Any, List, Union
+
 from pydantic import BaseModel, Field, field_validator
+from tlbx import ClassValueContainsMeta
 
 
-USER_ID_TYPES = {
-    "phone",
-    "email",
-    "session_id",
-}
+class UserIDTypes(metaclass=ClassValueContainsMeta):
+    PHONE = "phone"
+    EMAIL = "email"
+    SESSION_ID = "session_id"
 
 
 class PageRequestBody(BaseModel):
@@ -43,7 +44,7 @@ class UpdateUserContextRequestBody(BaseModel):
 
     @field_validator("id_type")
     def validate_id_type(cls, v):
-        if v not in USER_ID_TYPES:
+        if v not in UserIDTypes:
             raise ValueError(f"invalid id_type: {v}")
         return v
 
@@ -55,7 +56,7 @@ class GetUserContextRequestParams(BaseModel):
 
     @field_validator("id_type")
     def validate_id_type(cls, v):
-        if v not in USER_ID_TYPES:
+        if v not in UserIDTypes:
             raise ValueError(f"invalid id_type: {v}")
         return v
 
