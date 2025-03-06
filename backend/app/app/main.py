@@ -25,7 +25,8 @@ async def catch_exceptions_middleware(request: Request, call_next):
     except Exception as e:
         tb.print_exc()
         if settings.ROLLBAR_ENABLED:
-            if isinstance(e, JSONDecodeError) or "JSONDecodeError" in str(e):
+            if isinstance(e, JSONDecodeError) or "Expecting value: line" in str(e):
+                # Occasionally get these from what appears to be bot requests
                 rollbar.report_message(str(e), "warning")
             else:
                 rollbar.report_exc_info()
