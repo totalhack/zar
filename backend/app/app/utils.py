@@ -128,40 +128,72 @@ def get_zar_ids(zar):
     return vid, sid, cid
 
 
-def handle_zar_id_cookie(zar, cookie, key, headers, t=None, reset_param_value=None):
+def handle_zar_id_cookie(
+    zar,
+    cookie,
+    key,
+    headers,
+    t=None,
+    reset_param_value=None,
+    new_visit=False,
+):
     raiseifnot(cookie, f"Expected cookie value, got: {cookie}")
 
     # We moved to JSON format, but need to handle old case too
     if cookie.startswith("{"):
         zar[key] = json.loads(cookie)
-    else:
-        if key in zar and zar[key].get("id", None) != cookie:
-            zar[key]["id"] = cookie
-            zar[key]["cookie_mismatch"] = True
-        else:
+        if "visits" in zar[key]:
+            zar[key]["isNew"] = False
+            if new_visit:
+                zar[key]["visits"] += 1
+
+        if reset_param_value and reset_param_value != zar[key].get(
+            "resetParamValue", None
+        ):
+            # Force a reset and clear out stale info
+            old_id = zar[key]["id"]
             zar[key] = create_id_dict(
-                id=cookie, t=t, headers=headers, reset_param_value=reset_param_value
+                t=t, headers=headers, reset_param_value=reset_param_value
             )
+            new_id = zar[key]["id"]
+            zar["session_reset"] = True
+            warn(f"Reset session for {old_id} -> {new_id}")
+    else:
+        # Assume old style - cookie was just an ID, convert to dict
+        zar[key] = create_id_dict(
+            id=cookie, t=t, headers=headers, reset_param_value=reset_param_value
+        )
     return zar
 
 
 def get_zar_dict(zar, headers, sid_cookie=None, cid_cookie=None, create=True, url=None):
     zar = zar or {}
     t = int(time.time_ns() // 1e6)
-    reset_param_value = None
 
+    if create and "vid" not in zar:
+        zar["vid"] = create_vid_dict(t=t, headers=headers)
+
+    new_visit = False
+    if zar["vid"].get("isNew", True):
+        new_visit = True
+
+    reset_param_value = None
     if settings.SESSION_RESET_PARAM and url:
         parsed = urlparse(url)
         qs = parse_qs(parsed.query)
         reset_param_value = qs.get(settings.SESSION_RESET_PARAM, None)
         reset_param_value = reset_param_value[0] if reset_param_value else None
 
-    if create and "vid" not in zar:
-        zar["vid"] = create_vid_dict(t=t, headers=headers)
-
+    zar["session_reset"] = False
     if sid_cookie:
         handle_zar_id_cookie(
-            zar, sid_cookie, "sid", headers, t=t, reset_param_value=reset_param_value
+            zar,
+            sid_cookie,
+            "sid",
+            headers,
+            t=t,
+            reset_param_value=reset_param_value,
+            new_visit=new_visit,
         )
     elif create and "sid" not in zar:
         zar["sid"] = create_id_dict(
@@ -169,32 +201,9 @@ def get_zar_dict(zar, headers, sid_cookie=None, cid_cookie=None, create=True, ur
         )
 
     if cid_cookie:
-        handle_zar_id_cookie(
-            zar, cid_cookie, "cid", headers, t=t, reset_param_value=reset_param_value
-        )
+        handle_zar_id_cookie(zar, cid_cookie, "cid", headers, t=t, new_visit=new_visit)
     elif create and "cid" not in zar:
-        zar["cid"] = create_id_dict(
-            t=t, headers=headers, reset_param_value=reset_param_value
-        )
-
-    zar["session_reset"] = False
-    if (
-        reset_param_value
-        and sid_cookie
-        and zar["sid"].get("resetParamValue", None)
-        and reset_param_value != zar["sid"].get("resetParamValue", None)
-    ):
-        # Force a new session and clear our stale info
-        _, old_sid, _ = get_zar_ids(zar)
-        zar["sid"] = create_id_dict(
-            t=t, headers=headers, reset_param_value=reset_param_value
-        )
-        zar["cid"] = create_id_dict(
-            t=t, headers=headers, reset_param_value=reset_param_value
-        )
-        _, new_sid, _ = get_zar_ids(zar)
-        zar["session_reset"] = True
-        warn(f"Reset session for {old_sid} -> {new_sid}")
+        zar["cid"] = create_id_dict(t=t, headers=headers)
 
     return zar
 
