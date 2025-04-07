@@ -5,7 +5,7 @@ description = ""
 authors = ["Admin <admin@example.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.10,<3.13"
 uvicorn = "^0.34.0"
 fastapi = "^0.115.8"
 requests = "^2.23.0"
@@ -24,6 +24,7 @@ tlbx = ">= 0.1.21"
 black = "^19.10b0"
 orjson = "3.9.15"
 rollbar = "^1.2.0"
+pgeocode = "0.5.0"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"

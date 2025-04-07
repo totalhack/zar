@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     ALLOW_BOTS: bool = False
 
     SESSION_RESET_PARAM: Union[str, None] = None
+    USER_CONTEXT_ZIP_KEY: Union[str, None] = None
+    POOL_CONTEXT_ZIP_KEY: Union[str, None] = None
 
     model_config = {"case_sensitive": True}
 

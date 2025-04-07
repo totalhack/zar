@@ -61,6 +61,18 @@ class GetUserContextRequestParams(BaseModel):
         return v
 
 
+class RemoveUserContextRequestParams(BaseModel):
+    key: str
+    user_id: str
+    id_type: str
+
+    @field_validator("id_type")
+    def validate_id_type(cls, v):
+        if v not in UserIDTypes:
+            raise ValueError(f"invalid id_type: {v}")
+        return v
+
+
 class GetStaticNumberContextRequestParams(BaseModel):
     key: str
     number: str

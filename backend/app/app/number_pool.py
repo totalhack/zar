@@ -279,6 +279,15 @@ class NumberPoolAPI:
         self.set_user_context(id_type, user_id, context)
         return context
 
+    def remove_user_context(self, id_type, user_id):
+        if (
+            id_type == UserIDTypes.PHONE
+            and user_id.lower().lstrip("+") in IGNORED_USER_CONTEXT_CALLER_IDS
+        ):
+            return
+        key = self.get_user_context_key(id_type, user_id)
+        self.conn.delete(key)
+
     def get_static_number_key(self, number):
         return f"static:{number}"
 

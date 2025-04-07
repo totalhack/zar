@@ -1,3 +1,4 @@
+from functools import reduce
 import random
 import time
 from urllib.parse import parse_qs, urlparse, quote, unquote
@@ -63,6 +64,15 @@ def to_base(s, b):
         res += TO_BASE_CHARS[s % b]
         s //= b
     return res[::-1] or "0"
+
+
+def rgetkey(d, path, *default):
+    try:
+        return reduce(lambda x, y: x[y], path.split("."), d)
+    except KeyError:
+        if default:
+            return default[0]
+        raise
 
 
 def create_vid():

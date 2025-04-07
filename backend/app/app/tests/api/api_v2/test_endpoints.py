@@ -80,6 +80,14 @@ def reset_pool(client):
     assert resp.status_code == 200, resp.text
 
 
+def remove_user_context(client, id_type, user_id):
+    resp = client.get(
+        f"{settings.API_V2_STR}/remove_user_context",
+        params=dict(key="abc", user_id=user_id, id_type=id_type),
+    )
+    assert resp.status_code == 200, resp.text
+
+
 def test_endpoint_page_v2(client: TestClient) -> None:
     resp, data = page(client)
     sid1 = data["sid"]
@@ -256,7 +264,7 @@ def test_endpoint_number_session_expired(client: TestClient) -> None:
 SAMPLE_TRACK_CALL_REQUEST = {
     "key": "abc",
     "call_id": "1234",
-    "call_from": "5551235555",
+    "call_from": "4011235555",
     "call_to": "5551235556",
 }
 
@@ -285,7 +293,23 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
     number = data["number"]
 
-    # Add user context that should get returned later
+    new_req = copy.deepcopy(SAMPLE_NUMBER_POOL_REQUEST)
+    # Add example location to request/pool context
+    new_req["context"]["location"] = {
+        "Name": "32256",
+        "Parent ID": "21142",
+        "Target Type": "Postal Code",
+        "State": "Florida",
+        "State Abbr": "FL",
+        "Best Zip": "32256",
+        "City": "Jacksonville",
+        "Display Name": "Jacksonville, FL",
+    }
+    new_req["number"] = number
+    resp = client.post(f"{settings.API_V2_STR}/update_number", json=new_req)
+    data = resp.json()
+
+    # Add user context which includes a zip
     user_request = SAMPLE_USER_CONTEXT_REQUEST.copy()
     user_request["user_id"] = SAMPLE_TRACK_CALL_REQUEST["call_from"]
     resp = client.post(f"{settings.API_V2_STR}/update_user_context", json=user_request)
@@ -303,6 +327,10 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
     assert data.get("msg", {}).get("user_context", None)
+    assert data["msg"]["user_context"].get("zip_to_area_code_distance", None)
+    assert data["msg"]["request_context"]["latest_context"].get(
+        "zip_to_area_code_distance", None
+    )
 
     # route context should come into play on this one
     resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
@@ -311,12 +339,16 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     pp(data)
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
 
+    remove_user_context(
+        client, id_type="phone", user_id=SAMPLE_TRACK_CALL_REQUEST["call_from"]
+    )
+
 
 SAMPLE_USER_CONTEXT_REQUEST = {
     "key": "abc",
     "user_id": "4015735878",
     "id_type": "phone",
-    "context": {"foo": "bar", "baz": "bar"},
+    "context": {"foo": "bar", "baz": "bar", "Zip": "02184"},
 }
 
 

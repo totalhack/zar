@@ -20,6 +20,7 @@ from app.schemas.zar import (
     TrackRequestBody,
     TrackCallRequestBody,
     GetUserContextRequestParams,
+    RemoveUserContextRequestParams,
     UpdateUserContextRequestBody,
     GetStaticNumberContextRequestParams,
     SetStaticNumberContextsRequestBody,
@@ -28,6 +29,7 @@ from app.schemas.zar import (
 )
 from app.api import deps
 from app.core.config import settings
+from app.geo import zip_to_area_code_distance
 from app.number_pool import (
     NumberPoolAPI,
     NumberPoolResponseStatus,
@@ -47,6 +49,7 @@ from app.utils import (
     unquote_cookies,
     rb_warning,
     rb_error,
+    rgetkey,
 )
 
 DAYS = 24 * 60 * 60
@@ -580,6 +583,32 @@ def update_user_context(
     return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
 
 
+@router.get("/remove_user_context", response_model=Dict[str, Any])
+def remove_user_context(
+    request: Request, params: RemoveUserContextRequestParams = Depends()
+) -> Dict[str, Any]:
+    params = dict(params)
+    key = params.get("key", None)
+    if (not settings.DEBUG) and ((not key) or (key != settings.NUMBER_POOL_KEY)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if settings.DEBUG:
+        print_request(request.headers, None)
+
+    global pool_api
+    if not pool_api:
+        res = dict(
+            status=NumberPoolResponseStatus.ERROR,
+            msg=NumberPoolResponseMessages.POOL_UNAVAILABLE,
+        )
+        rb_warning(res, request=request)
+        return res
+
+    user_id = params["user_id"]
+    id_type = params["id_type"]
+    pool_api.remove_user_context(id_type, user_id)
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=None)
+
+
 @router.get("/get_static_number_context", response_model=Dict[str, Any])
 def get_static_number_context(
     request: Request, params: GetStaticNumberContextRequestParams = Depends()
@@ -665,17 +694,37 @@ async def track_call(
 
     call_to = body["call_to"].lstrip("+1")
     call_from = body["call_from"].lstrip("+1")
+    user_area_code = call_from[:3]
+
     pool_ctx = pool_api.get_pool_number_context(call_to)
     route_ctx = pool_api.get_cached_route_context(call_from, call_to)
     user_ctx = pool_api.get_user_context("phone", call_from)
     from_route_cache = False
+    has_cached_route = True if route_ctx else False
     ctx = None
+
+    # Populate the user context with the area code distance if possible
+    if (
+        user_ctx
+        and settings.USER_CONTEXT_ZIP_KEY
+        and rgetkey(user_ctx, settings.USER_CONTEXT_ZIP_KEY, None)
+    ):
+        user_zip = rgetkey(user_ctx, settings.USER_CONTEXT_ZIP_KEY, None)
+        try:
+            user_zip_dist = zip_to_area_code_distance(user_zip, user_area_code)
+            if user_zip_dist is not None:
+                user_ctx["zip_to_area_code_distance"] = user_zip_dist
+        except Exception as e:
+            rb_warning(
+                f"Failed to calculate zip {user_zip} to area code {user_area_code} distance: {str(e)}",
+                request=request,
+            )
 
     if not (pool_ctx or route_ctx):
         # Check if this is a static number with context
         static_ctx = pool_api.get_static_number_context(call_to)
         if static_ctx:
-            ctx = dict(static_context=static_ctx)
+            ctx = dict(static_context=static_ctx, has_cached_route=has_cached_route)
             if user_ctx:
                 ctx["user_context"] = user_ctx
             info(f"{call_from} -> {call_to}: found static number context")
@@ -705,7 +754,7 @@ async def track_call(
 
     if not ctx:
         if user_ctx:
-            ctx = dict(user_context=user_ctx)
+            ctx = dict(user_context=user_ctx, has_cached_route=has_cached_route)
             res = dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
             warn(f"{call_from} -> {call_to}: only found user context")
         else:
@@ -716,12 +765,32 @@ async def track_call(
             warn(f"{call_from} -> {call_to}: {res}")
         return res
 
+    # Populate the final context with the area code distance if possible
+    latest_ctx = ctx.get("request_context", {}).get("latest_context", {})
+    if (
+        latest_ctx
+        and settings.POOL_CONTEXT_ZIP_KEY
+        and rgetkey(latest_ctx, settings.POOL_CONTEXT_ZIP_KEY, None)
+    ):
+        ctx_zip = rgetkey(latest_ctx, settings.POOL_CONTEXT_ZIP_KEY, None)
+        try:
+            ctx_zip_dist = zip_to_area_code_distance(ctx_zip, user_area_code)
+            if ctx_zip_dist is not None:
+                latest_ctx["zip_to_area_code_distance"] = ctx_zip_dist
+        except Exception as e:
+            rb_warning(
+                f"Failed to calculate zip {ctx_zip} to area code {user_area_code} distance: {str(e)}",
+                request=request,
+            )
+
     if user_ctx:
         ctx["user_context"] = user_ctx
 
     pool_api.set_cached_route_context(call_from, call_to, ctx)
 
+    ctx["has_cached_route"] = has_cached_route
     ctx_json = json.dumps(ctx)
+
     insert_stmt = insert(models.TrackCall).values(
         call_id=body["call_id"],
         sid=ctx.get("request_context", {}).get("sid", None),
