@@ -739,4 +739,5 @@ def zip_to_area_code_distance(zip_code, area_code):
         float(area_code_info["Longitude"]),
     )
     dist = haversine_distance(zip_lat_lon, area_code_lat_lon)
-    return round(dist, 1)
+    rounded = round(dist, 1)
+    return rounded if math.isfinite(rounded) else None
