@@ -20,9 +20,13 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - NUMBER_POOL_ENABLED=${NUMBER_POOL_ENABLED-false}
       - NUMBER_POOL_KEY=${NUMBER_POOL_KEY}
-      - SESSION_RESET_PARAM=${SESSION_RESET_PARAM}
+      - SESSION_SOURCE_PARAM=${SESSION_SOURCE_PARAM}
       - USER_CONTEXT_ZIP_KEY=${USER_CONTEXT_ZIP_KEY}
       - POOL_CONTEXT_ZIP_KEY=${POOL_CONTEXT_ZIP_KEY}
+      - CRITERIA_AREA_CODES_PATH=${CRITERIA_AREA_CODES_PATH}
+      - LOC_PHYSICAL_URL_PARAM=${LOC_PHYSICAL_URL_PARAM}
+      - LOC_INTEREST_URL_PARAM=${LOC_INTEREST_URL_PARAM}
+      - BING_SOURCE_IDS=${BING_SOURCE_IDS}
     logging:
       driver: awslogs
       options:
@@ -41,6 +45,6 @@ services:
 
   redis:
     image: "redis:6.2.7-alpine"
-    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory 512mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory 600mb --maxmemory-policy allkeys-lru --save "" --appendonly no
     ports:
       - "6379"

@@ -188,10 +188,10 @@ def get_zar_dict(zar, headers, sid_cookie=None, cid_cookie=None, create=True, ur
         new_visit = True
 
     reset_param_value = None
-    if settings.SESSION_RESET_PARAM and url:
+    if settings.SESSION_SOURCE_PARAM and url:
         parsed = urlparse(url)
         qs = parse_qs(parsed.query)
-        reset_param_value = qs.get(settings.SESSION_RESET_PARAM, None)
+        reset_param_value = qs.get(settings.SESSION_SOURCE_PARAM, None)
         reset_param_value = reset_param_value[0] if reset_param_value else None
 
     zar["session_reset"] = False

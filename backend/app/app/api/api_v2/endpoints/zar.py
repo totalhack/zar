@@ -29,7 +29,7 @@ from app.schemas.zar import (
 )
 from app.api import deps
 from app.core.config import settings
-from app.geo import zip_to_area_code_distance
+from app.geo import zip_to_area_code_distance, CRITERIA_AREA_CODES
 from app.number_pool import (
     NumberPoolAPI,
     NumberPoolResponseStatus,
@@ -96,6 +96,83 @@ def get_pool_context(vid, sid, sid_original_referer, context, headers):
     return res
 
 
+def get_area_code_from_context(context):
+    """
+    Among other things, context should have a "url" attribute within its
+    latest_context. Example:
+
+        {
+        'latest_context': {'url': 'http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=9002212'},
+        }
+    """
+    if not settings.CRITERIA_AREA_CODES_PATH:
+        rb_error("get_area_code_from_context: criteria area codes not loaded")
+        return None
+
+    if not CRITERIA_AREA_CODES:
+        rb_error("get_area_code_from_context: criteria area codes empty")
+        return None
+
+    loc_physical_param = settings.LOC_PHYSICAL_URL_PARAM or "loc_physical_ms"
+    loc_interest_param = settings.LOC_INTEREST_URL_PARAM or "loc_interest_ms"
+
+    url = context["latest_context"].get("url", None)
+    if not url:
+        return None
+
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    loc_physical = qs.get(loc_physical_param, None)
+    loc_interest = qs.get(loc_interest_param, None)
+
+    source_prefix = ""
+    if settings.SESSION_SOURCE_PARAM and settings.BING_SOURCE_IDS:
+        session_source = qs.get(settings.SESSION_SOURCE_PARAM, None)
+        if session_source:
+            session_source = session_source[0]
+            if session_source in settings.BING_SOURCE_IDS:
+                source_prefix = "bing-"
+
+    if not loc_physical and not loc_interest:
+        return None
+
+    if loc_physical:
+        loc_physical = source_prefix + loc_physical[0]
+    if loc_interest:
+        loc_interest = source_prefix + loc_interest[0]
+
+    if loc_physical and not loc_interest:
+        area_code = CRITERIA_AREA_CODES.get(loc_physical, {}).get("area_code", None)
+        return area_code or None
+
+    if not loc_physical and loc_interest:
+        area_code = CRITERIA_AREA_CODES.get(loc_interest, {}).get("area_code", None)
+        return area_code or None
+
+    if loc_physical and loc_interest:
+        physical_data = CRITERIA_AREA_CODES.get(loc_physical, {})
+        interest_data = CRITERIA_AREA_CODES.get(loc_interest, {})
+        physical_area_code = physical_data.get("area_code", None)
+        interest_area_code = interest_data.get("area_code", None)
+        physical_state = physical_data.get("state", None)
+        interest_state = interest_data.get("state", None)
+
+        if not physical_area_code and not interest_area_code:
+            return None
+
+        # If both dont have state info, use physical area code
+        if not (physical_state and interest_state):
+            return physical_area_code
+
+        # If states are different, use physical area code
+        if physical_state != interest_state:
+            return physical_area_code
+        else:
+            return interest_area_code
+
+    return None
+
+
 def get_pool_number(pool_api, pool_id, context, number=None, request=None):
     if not pool_api:
         res = dict(
@@ -107,11 +184,16 @@ def get_pool_number(pool_api, pool_id, context, number=None, request=None):
         warn(res)
         return res
 
+    target_area_code = None
+    if (not number) and pool_api.is_area_code_pool(pool_id):
+        target_area_code = get_area_code_from_context(context)
+
     try:
         res = pool_api.lease_number(
             pool_id,
             context,
             target_number=number,
+            target_area_code=target_area_code,
             renew=True if number else False,
         )
         res = dict(status=NumberPoolResponseStatus.SUCCESS, number=res, msg=None)

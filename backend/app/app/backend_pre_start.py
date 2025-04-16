@@ -37,7 +37,7 @@ def init_number_pool():
     except NumberPoolUnavailable as e:
         logger.warn(str(e))
     except Exception as e:
-        if not "doesn't exist" in str(e):
+        if "doesn't exist" not in str(e):
             raise
         logger.warning("Table(s) don't exist!")
 

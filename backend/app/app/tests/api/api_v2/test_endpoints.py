@@ -8,6 +8,8 @@ from app.core.config import settings
 from app.number_pool import NumberPoolResponseStatus
 
 
+AREA_CODE_POOL_ID = 3
+
 SAMPLE_PAGE_REQUEST = {
     "type": "page",
     "properties": {
@@ -60,22 +62,27 @@ def test_options_request_page(client: TestClient) -> None:
     assert "OPTIONS" in allowed_methods
 
 
-def page_with_pool(client, pool_id=1, max_age=None):
+def page_with_pool(client, pool_id=1, max_age=None, url=None):
     req = SAMPLE_PAGE_REQUEST.copy()
     req["properties"]["pool_id"] = pool_id
     if max_age:
         req["properties"]["pool_max_age"] = max_age
-    req["properties"]["url"] = "http://localhost:8080/one?pl=1"
+    url = url or "http://localhost:8080/one?pl=1"
+    req["properties"]["url"] = url
+    # It's necessary to also put certain context items in here if you want
+    # it to be accessible to all pool functionality such as assessing
+    # the area code.
+    req["properties"]["pool_context"] = dict(url=url)
     resp, data = page(client, req=req)
     cookies = dict(resp.cookies)
     assert "_zar_pool" in cookies
     return resp, data
 
 
-def reset_pool(client):
+def reset_pool(client, pool_id=1):
     resp = client.get(
         f"{settings.API_V2_STR}/reset_pool",
-        params=dict(key="abc", pool_id=1, preserve=False),
+        params=dict(key="abc", pool_id=pool_id, preserve=False),
     )
     assert resp.status_code == 200, resp.text
 
@@ -88,7 +95,7 @@ def remove_user_context(client, id_type, user_id):
     assert resp.status_code == 200, resp.text
 
 
-def test_endpoint_page_v2(client: TestClient) -> None:
+def test_endpoint_page_v2(client: TestClient):
     resp, data = page(client)
     sid1 = data["sid"]
 
@@ -115,9 +122,71 @@ def test_endpoint_page_v2(client: TestClient) -> None:
     assert sid5 == sid4
 
 
-def test_endpoint_number_via_page(client: TestClient) -> None:
+def test_endpoint_number_via_page(client: TestClient):
     resp, data = page_with_pool(client)
     assert data.get("pool_data", None) and data["pool_data"].get("number", None)
+
+
+def test_endpoint_area_code_number_via_page(client: TestClient):
+    pool_id = AREA_CODE_POOL_ID
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Test 9002212 (Pawtucket, RI), should get a 401 number
+    url = "http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=9002212"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("401")
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Test 9002212 in loc_interest
+    url = "http://localhost:8080/one?pl=1&loc_interest_ms=9002212"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("401")
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Test 9002212 in loc_physical with 1012873 (Anchorage, AK) as interest
+    url = (
+        "http://localhost:8080/one?pl=1&loc_physical_ms=9002212&loc_interest_ms=1012873"
+    )
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("401")
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Test invalid ID
+    url = "http://localhost:8080/one?pl=1&loc_physical_ms=XYZ"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number
+
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Test valid but no area code match
+    url = "http://localhost:8080/one?pl=1&loc_physical_ms=1012873"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number
+
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Test bing prefix 63978 (Pawtucket, RI), should get a 401 number
+    url = "http://localhost:8080/one?s=bing&pl=1&loc_physical_ms=63978"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("401")
 
 
 SAMPLE_TRACK_REQUEST = {

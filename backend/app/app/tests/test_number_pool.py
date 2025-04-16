@@ -13,8 +13,10 @@ from app.number_pool import (
 
 pool_api = NumberPoolAPI()
 pool_api.init_pools()
+
 DEFAULT_POOL_ID = 1
 OTHER_POOL_ID = 2
+AREA_CODE_POOL_ID = 3
 
 
 def test_pool_lease_number():
@@ -196,3 +198,32 @@ def test_pool_multi_pool_sid():
 
     taken = pool_api._get_taken_numbers(OTHER_POOL_ID)
     assert len(taken) == 1
+
+
+def test_pool_area_code():
+    pool_api._reset_pool(AREA_CODE_POOL_ID, preserve=False)
+    ctx = {}
+
+    # 1) Lease with area code
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="401")
+    print("number:", num)
+    assert num and num.startswith("401")
+
+    # 2) Request with no area code
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code=None)
+    print("number:", num)
+    assert num and num.startswith("878")
+
+    # 3) Request with invalid area code
+    with pytest.raises(AssertionError):
+        num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="xyz")
+
+    # 4) Exhaust 401 (2 numbers) and hit fallback
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="401")
+    print("number:", num)
+    assert num and num.startswith("401")
+
+    # Should get the fallback
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="401")
+    print("number:", num)
+    assert num and num.startswith("878")

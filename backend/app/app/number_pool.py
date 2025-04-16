@@ -46,6 +46,8 @@ IGNORED_USER_CONTEXT_CALLER_IDS = {
     "266696687",
 }
 
+pool_properties_cache = {}
+
 
 class NumberPoolUnavailable(Exception):
     pass
@@ -162,6 +164,18 @@ class NumberPoolAPI:
         )
         return set([x["number"] for x in res.fetchall()])
 
+    def get_pool_properties(self, pool_id):
+        global pool_properties_cache
+        return pool_properties_cache.get(pool_id, {})
+
+    def set_pool_properties(self, pool_id, pool_row):
+        global pool_properties_cache
+        try:
+            properties = json.loads(dict(pool_row).get("properties", None) or {})
+            pool_properties_cache[pool_id] = properties
+        except Exception as e:
+            error(f"Failed to load pool {pool_id} properties: {e}")
+
     def init_pools(self, pool_ids=None):
         start = time.time()
         pools = []
@@ -177,6 +191,8 @@ class NumberPoolAPI:
                     if pool_ids and (pool_id not in pool_ids):
                         info(f"Skipping pool {pool_id}/{pool['name']}")
                         continue
+
+                    self.set_pool_properties(pool_id, pool)
 
                     try:
                         with self._get_pool_lock(pool_id):
@@ -317,7 +333,18 @@ class NumberPoolAPI:
             stats[f"{pool_id}/{pool['name']}"] = pool_res
         return stats
 
-    def lease_number(self, pool_id, request_context, target_number=None, renew=False):
+    def is_area_code_pool(self, pool_id):
+        pool_props = self.get_pool_properties(pool_id) or {}
+        return (pool_props.get("area_code", None) or "").lower() == "all"
+
+    def lease_number(
+        self,
+        pool_id,
+        request_context,
+        target_number=None,
+        target_area_code=None,
+        renew=False,
+    ):
         request_context = request_context or {}
         start = time.time()
         number = None
@@ -325,6 +352,11 @@ class NumberPoolAPI:
         key_mismatch = False
         sid_number_mismatch = False
         request_sid = self._get_session_id(pool_id, request_context)
+
+        # Flag if this is a pool that tries to choose a tracking number to match
+        # the user's area code. Need to use special logic even if a target
+        # area code is not specified.
+        area_code_pool = self.is_area_code_pool(pool_id)
 
         dbg(f"{request_sid}: pool_id: {pool_id}, target number {target_number}")
 
@@ -384,7 +416,12 @@ class NumberPoolAPI:
                 if (not number) and (
                     (not from_sid) or (key_mismatch and not sid_number_mismatch)
                 ):
-                    number = self._lease_random_number(pool_id, request_context)
+                    if area_code_pool:
+                        number = self._lease_area_code_number(
+                            pool_id, request_context, target_area_code
+                        )
+                    else:
+                        number = self._lease_random_number(pool_id, request_context)
         except LockError as e:
             raise NumberPoolUnavailable(f"Could not acquire pool {pool_id} lock")
 
@@ -649,6 +686,53 @@ class NumberPoolAPI:
         self._take_number(pool_id, number, request_context)
         return number
 
+    def _lease_area_code_number(self, pool_id, request_context, area_code):
+        fallback_area_code = self.get_pool_properties(pool_id).get(
+            "fallback_area_code", None
+        )
+        raiseifnot(
+            fallback_area_code, f"No fallback area code specified for pool {pool_id}"
+        )
+        if not area_code:
+            # This can happen if the area code pool is in use but we didn't have
+            # enough info to target a specific area code. We still want to force
+            # picking a number from the fallback area code.
+            warn(f"Area code not specified, using fallback {fallback_area_code}")
+            area_code = fallback_area_code
+
+        raiseifnot(
+            isinstance(area_code, str) and len(area_code) == 3 and area_code.isdigit(),
+            f"Invalid area code: {area_code}",
+        )
+
+        pattern = f"{area_code}*"
+        dbg(f"Searching for number with area code {area_code} in {pool_id}")
+
+        free_pool_name = self._get_free_pool_name(pool_id)
+        for number in self.conn.sscan_iter(free_pool_name, match=pattern, count=1):
+            try:
+                leased_number = self._lease_free_number(
+                    pool_id, number, request_context
+                )
+                if leased_number:
+                    return leased_number
+            except NumberNotFound:
+                # Shouldn't happen given lock behavior, but just in case
+                dbg(f"Number {number} found by sscan but was already taken.")
+                continue
+
+        # If we didn't find a number, try the fallback area code
+        if fallback_area_code != area_code:
+            warn(f"Trying fallback area code {fallback_area_code}")
+            leased_number = self._lease_area_code_number(
+                pool_id, request_context, fallback_area_code
+            )
+            if leased_number:
+                return leased_number
+
+        warn(f"No free number found with area code {area_code} in {pool_id}")
+        return None
+
     def _lease_free_number(self, pool_id, number, request_context):
         info(f"Leasing free number: {pool_id}/{number}")
         res = self._pop_free_number(pool_id, number)
@@ -695,4 +779,5 @@ class NumberPoolAPI:
         pools = self.get_pools_from_db()
         info(f"Resetting {len(pools)} pools")
         for pool in pools:
+            self.set_pool_properties(pool["id"], pool)
             self._reset_pool(pool["id"], preserve=preserve)

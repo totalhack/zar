@@ -9,6 +9,7 @@ import uvicorn.protocols.utils
 from app.core.config import settings
 from app.core.logging import default_logger, dbg, info, warn, error
 from app.db.session import database
+from app.geo import init_criteria_area_codes
 from app.utils import extract_header_params
 
 
@@ -46,6 +47,8 @@ class ORJSONResponse(JSONResponse):
 @asynccontextmanager
 async def lifespan(app):
     await database.connect()
+    if settings.CRITERIA_AREA_CODES_PATH:
+        init_criteria_area_codes()
     print("FastAPI app started with async database connection")
     try:
         yield  # Hand control to the app

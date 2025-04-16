@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+    def assemble_cors_origins(cls, v: Union[str, List[str]]):
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
         elif isinstance(v, (list, str)):
@@ -41,9 +41,23 @@ class Settings(BaseSettings):
 
     ALLOW_BOTS: bool = False
 
-    SESSION_RESET_PARAM: Union[str, None] = None
+    SESSION_SOURCE_PARAM: Union[str, None] = None
     USER_CONTEXT_ZIP_KEY: Union[str, None] = None
     POOL_CONTEXT_ZIP_KEY: Union[str, None] = None
+
+    CRITERIA_AREA_CODES_PATH: Union[str, None] = None
+    LOC_PHYSICAL_URL_PARAM: Union[str, None] = None
+    LOC_INTEREST_URL_PARAM: Union[str, None] = None
+    BING_SOURCE_IDS: Union[List[str], None] = None
+
+    @field_validator("BING_SOURCE_IDS", mode="before")
+    @classmethod
+    def assemble_bing_source_ids(cls, v: Union[str, List[str]]):
+        if isinstance(v, list):
+            return v
+        elif not str(v).startswith("["):
+            return [i.strip() for i in str(v).split(",")]
+        raise ValueError(v)
 
     model_config = {"case_sensitive": True}
 
