@@ -46,8 +46,6 @@ IGNORED_USER_CONTEXT_CALLER_IDS = {
     "266696687",
 }
 
-pool_properties_cache = {}
-
 
 class NumberPoolUnavailable(Exception):
     pass
@@ -141,6 +139,8 @@ class NumberPoolAPI:
     track the numbers with the oldest renewal time for reclaiming to the pool (if
     they are past expiration).
 
+    Pool properties are stored in Redis under keys like 'pool_properties:{pool_id}'.
+
     * TODO add number limits by request ip/user agent/host
     """
 
@@ -148,6 +148,7 @@ class NumberPoolAPI:
         # NOTE: It is assumed the pool has been initialized by an outside process,
         # such as in a prestart command for the service.
         self.conn = get_number_pool_conn(tries=conn_tries)
+        self._pool_properties_cache = {}
         if not self.conn:
             raise NumberPoolUnavailable("could not connect to pool")
 
@@ -164,17 +165,51 @@ class NumberPoolAPI:
         )
         return set([x["number"] for x in res.fetchall()])
 
+    def _get_pool_properties_key(self, pool_id):
+        return f"pool_properties:{pool_id}"
+
     def get_pool_properties(self, pool_id):
-        global pool_properties_cache
-        return pool_properties_cache.get(pool_id, {})
+        if pool_id in self._pool_properties_cache:
+            return self._pool_properties_cache[pool_id]
+        key = self._get_pool_properties_key(pool_id)
+        properties_json = self.conn.get(key)
+        if properties_json:
+            res = json.loads(properties_json)
+            self._pool_properties_cache[pool_id] = res
+            return res
+        msg = f"Pool properties not found for pool {pool_id}"
+        rollbar.report_message(dict(msg=msg), "warning")
+        return {}
 
     def set_pool_properties(self, pool_id, pool_row):
-        global pool_properties_cache
-        try:
-            properties = json.loads(dict(pool_row).get("properties", None) or {})
-            pool_properties_cache[pool_id] = properties
-        except Exception as e:
-            error(f"Failed to load pool {pool_id} properties: {e}")
+        key = self._get_pool_properties_key(pool_id)
+        pool_data = dict(pool_row)
+        properties_str = pool_data.get("properties", None) or "{}"
+        properties = json.loads(properties_str)  # Validate JSON
+        self.conn.set(key, json.dumps(properties))
+        self._pool_properties_cache[pool_id] = properties
+        dbg(f"Stored properties for pool {pool_id}")
+
+    def reset_pool_properties(self):
+        info("Repopulating all pool properties in Redis...")
+        start = time.time()
+        pools = self.get_pools_from_db()
+        count = 0
+        errors = 0
+        self._pool_properties_cache = {}
+
+        for pool in pools:
+            pool_id = pool["id"]
+            try:
+                self.set_pool_properties(pool_id, pool)
+                count += 1
+            except Exception as e:
+                error(f"Failed to set properties for pool {pool_id}: {e}")
+                errors += 1
+        info(
+            f"Repopulated {count} pool configs ({errors} errors) in {time.time() - start:.3f}s"
+        )
+        return {"success": count, "errors": errors}
 
     def init_pools(self, pool_ids=None):
         start = time.time()
@@ -185,7 +220,7 @@ class NumberPoolAPI:
             with self._get_init_lock():
                 info("Initializing number pools...")
                 counts = {}
-                pools = self.get_pools_from_db()  # TODO store pool configs in redis
+                pools = self.get_pools_from_db()
                 for pool in pools:
                     pool_id = pool["id"]
                     if pool_ids and (pool_id not in pool_ids):
@@ -208,11 +243,11 @@ class NumberPoolAPI:
                                 )
                                 self._add_numbers(pool_id, numbers)
                             counts[pool["name"]] = len(numbers)
-                    except LockError as e:
+                    except LockError:
                         errors.append(
                             f"Unable to init pool {pool_id}/{pool['name']}: LockError"
                         )
-        except LockError as e:
+        except LockError:
             info("Could not get init lock, moving on")
             return
 
@@ -777,6 +812,7 @@ class NumberPoolAPI:
 
     def _reset_pools(self, preserve=True):
         pools = self.get_pools_from_db()
+        self._pool_properties_cache = {}
         info(f"Resetting {len(pools)} pools")
         for pool in pools:
             self.set_pool_properties(pool["id"], pool)

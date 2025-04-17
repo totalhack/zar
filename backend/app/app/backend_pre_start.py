@@ -35,7 +35,7 @@ def init_number_pool():
         pool_api = NumberPoolAPI()
         pool_api.init_pools()
     except NumberPoolUnavailable as e:
-        logger.warn(str(e))
+        logger.warning(str(e))
     except Exception as e:
         if "doesn't exist" not in str(e):
             raise
