@@ -377,7 +377,7 @@ class NumberPoolAPI:
         pool_id,
         request_context,
         target_number=None,
-        target_area_code=None,
+        target_area_codes=None,
         renew=False,
     ):
         request_context = request_context or {}
@@ -453,7 +453,7 @@ class NumberPoolAPI:
                 ):
                     if area_code_pool:
                         number = self._lease_area_code_number(
-                            pool_id, request_context, target_area_code
+                            pool_id, request_context, target_area_codes
                         )
                     else:
                         number = self._lease_random_number(pool_id, request_context)
@@ -721,46 +721,49 @@ class NumberPoolAPI:
         self._take_number(pool_id, number, request_context)
         return number
 
-    def _lease_area_code_number(self, pool_id, request_context, area_code):
+    def _lease_area_code_number(self, pool_id, request_context, area_codes):
         fallback_area_code = self.get_pool_properties(pool_id).get(
             "fallback_area_code", None
         )
         raiseifnot(
             fallback_area_code, f"No fallback area code specified for pool {pool_id}"
         )
-        if not area_code:
+        if not area_codes:
             # This can happen if the area code pool is in use but we didn't have
             # enough info to target a specific area code. We still want to force
             # picking a number from the fallback area code.
             warn(f"Area code not specified, using fallback {fallback_area_code}")
-            area_code = fallback_area_code
+            area_codes = [fallback_area_code]
 
-        raiseifnot(
-            isinstance(area_code, str) and len(area_code) == 3 and area_code.isdigit(),
-            f"Invalid area code: {area_code}",
-        )
+        for area_code in area_codes:
+            raiseifnot(
+                isinstance(area_code, str)
+                and len(area_code) == 3
+                and area_code.isdigit(),
+                f"Invalid area code: {area_code}",
+            )
 
-        pattern = f"{area_code}*"
-        dbg(f"Searching for number with area code {area_code} in {pool_id}")
+            pattern = f"{area_code}*"
+            dbg(f"Searching for number with area code {area_code} in {pool_id}")
 
-        free_pool_name = self._get_free_pool_name(pool_id)
-        for number in self.conn.sscan_iter(free_pool_name, match=pattern, count=1):
-            try:
-                leased_number = self._lease_free_number(
-                    pool_id, number, request_context
-                )
-                if leased_number:
-                    return leased_number
-            except NumberNotFound:
-                # Shouldn't happen given lock behavior, but just in case
-                dbg(f"Number {number} found by sscan but was already taken.")
-                continue
+            free_pool_name = self._get_free_pool_name(pool_id)
+            for number in self.conn.sscan_iter(free_pool_name, match=pattern, count=1):
+                try:
+                    leased_number = self._lease_free_number(
+                        pool_id, number, request_context
+                    )
+                    if leased_number:
+                        return leased_number
+                except NumberNotFound:
+                    # Shouldn't happen given lock behavior, but just in case
+                    dbg(f"Number {number} found by sscan but was already taken.")
+                    continue
 
         # If we didn't find a number, try the fallback area code
-        if fallback_area_code != area_code:
+        if fallback_area_code not in area_codes:
             warn(f"Trying fallback area code {fallback_area_code}")
             leased_number = self._lease_area_code_number(
-                pool_id, request_context, fallback_area_code
+                pool_id, request_context, [fallback_area_code]
             )
             if leased_number:
                 return leased_number

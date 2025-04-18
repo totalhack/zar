@@ -935,8 +935,8 @@ AREA_CODES = {
     },
     "508": {
         "Metro Area": "Worcester, MA",
-        "Latitude": "42.26",
-        "Longitude": "-71.8",
+        "Latitude": "41.8",
+        "Longitude": "-71.0",
         "Population": 1200000,
     },
     "509": {
@@ -2413,12 +2413,15 @@ def init_criteria_area_codes():
                     row["longitude"] = (
                         float(row["longitude"]) if row["longitude"] else None
                     )
-                    row["distance_miles"] = (
-                        float(row["distance_miles"]) if row["distance_miles"] else None
+                    row["distances"] = (
+                        row["distances"].split("|") if row["distances"] else None
+                    )
+                    row["area_codes"] = (
+                        row["area_codes"].split("|") if row["area_codes"] else None
                     )
                 except (ValueError, TypeError) as e:
                     warn(
-                        f"Could not convert numeric value for criteria_id {criteria_id}: {e}"
+                        f"Could not convert values for criteria_id {criteria_id}: {e} -- {row}"
                     )
                 CRITERIA_AREA_CODES[criteria_id] = row
         info(f"Loaded {len(CRITERIA_AREA_CODES)} criteria area codes from {path}")

@@ -161,6 +161,23 @@ def test_endpoint_area_code_number_via_page(client: TestClient):
     reset_pool(client, pool_id=pool_id)
     client.cookies.clear()
 
+    # Test 1018455 (Wayland, MA), should get a 339 number
+    url = "http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=1018455"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("339")
+
+    client.cookies.clear()
+
+    # Test 1018455 (Wayland, MA) again, should get a 781 number since 339 was taken but
+    # Wayland also maps to 781 as an option.
+    url = "http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=1018455"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("781")
+
     # Test invalid ID
     url = "http://localhost:8080/one?pl=1&loc_physical_ms=XYZ"
     resp, data = page_with_pool(client, pool_id=pool_id, url=url)

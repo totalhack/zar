@@ -96,7 +96,7 @@ def get_pool_context(vid, sid, sid_original_referer, context, headers):
     return res
 
 
-def get_area_code_from_context(context):
+def get_area_codes_from_context(context):
     """
     Among other things, context should have a "url" attribute within its
     latest_context. Example:
@@ -142,33 +142,33 @@ def get_area_code_from_context(context):
         loc_interest = source_prefix + loc_interest[0]
 
     if loc_physical and not loc_interest:
-        area_code = CRITERIA_AREA_CODES.get(loc_physical, {}).get("area_code", None)
-        return area_code or None
+        area_codes = CRITERIA_AREA_CODES.get(loc_physical, {}).get("area_codes", None)
+        return area_codes or None
 
     if not loc_physical and loc_interest:
-        area_code = CRITERIA_AREA_CODES.get(loc_interest, {}).get("area_code", None)
-        return area_code or None
+        area_codes = CRITERIA_AREA_CODES.get(loc_interest, {}).get("area_codes", None)
+        return area_codes or None
 
     if loc_physical and loc_interest:
         physical_data = CRITERIA_AREA_CODES.get(loc_physical, {})
         interest_data = CRITERIA_AREA_CODES.get(loc_interest, {})
-        physical_area_code = physical_data.get("area_code", None)
-        interest_area_code = interest_data.get("area_code", None)
+        physical_area_codes = physical_data.get("area_codes", None)
+        interest_area_codes = interest_data.get("area_codes", None)
         physical_state = physical_data.get("state", None)
         interest_state = interest_data.get("state", None)
 
-        if not physical_area_code and not interest_area_code:
+        if not physical_area_codes and not interest_area_codes:
             return None
 
         # If both dont have state info, use physical area code
         if not (physical_state and interest_state):
-            return physical_area_code
+            return physical_area_codes
 
         # If states are different, use physical area code
         if physical_state != interest_state:
-            return physical_area_code
+            return physical_area_codes
         else:
-            return interest_area_code
+            return interest_area_codes
 
     return None
 
@@ -184,16 +184,16 @@ def get_pool_number(pool_api, pool_id, context, number=None, request=None):
         warn(res)
         return res
 
-    target_area_code = None
+    target_area_codes = None
     if (not number) and pool_api.is_area_code_pool(pool_id):
-        target_area_code = get_area_code_from_context(context)
+        target_area_codes = get_area_codes_from_context(context)
 
     try:
         res = pool_api.lease_number(
             pool_id,
             context,
             target_number=number,
-            target_area_code=target_area_code,
+            target_area_codes=target_area_codes,
             renew=True if number else False,
         )
         res = dict(status=NumberPoolResponseStatus.SUCCESS, number=res, msg=None)

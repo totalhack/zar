@@ -205,25 +205,38 @@ def test_pool_area_code():
     ctx = {}
 
     # 1) Lease with area code
-    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="401")
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_codes=["401"])
     print("number:", num)
     assert num and num.startswith("401")
 
     # 2) Request with no area code
-    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code=None)
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_codes=None)
     print("number:", num)
     assert num and num.startswith("878")
 
     # 3) Request with invalid area code
     with pytest.raises(AssertionError):
-        num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="xyz")
+        num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_codes=["xyz"])
 
     # 4) Exhaust 401 (2 numbers) and hit fallback
-    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="401")
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_codes=["401"])
     print("number:", num)
     assert num and num.startswith("401")
 
     # Should get the fallback
-    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_code="401")
+    num = pool_api.lease_number(AREA_CODE_POOL_ID, ctx, target_area_codes=["401"])
     print("number:", num)
     assert num and num.startswith("878")
+
+    # 5) Tet multiple area codes
+    num = pool_api.lease_number(
+        AREA_CODE_POOL_ID, ctx, target_area_codes=["339", "781"]
+    )
+    print("number:", num)
+    assert num and num.startswith("339")
+
+    num = pool_api.lease_number(
+        AREA_CODE_POOL_ID, ctx, target_area_codes=["339", "781"]
+    )
+    print("number:", num)
+    assert num and num.startswith("781")
