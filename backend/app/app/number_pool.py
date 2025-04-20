@@ -746,18 +746,45 @@ class NumberPoolAPI:
             pattern = f"{area_code}*"
             dbg(f"Searching for number with area code {area_code} in {pool_id}")
 
-            free_pool_name = self._get_free_pool_name(pool_id)
-            for number in self.conn.sscan_iter(free_pool_name, match=pattern, count=1):
-                try:
-                    leased_number = self._lease_free_number(
-                        pool_id, number, request_context
-                    )
-                    if leased_number:
-                        return leased_number
-                except NumberNotFound:
-                    # Shouldn't happen given lock behavior, but just in case
-                    dbg(f"Number {number} found by sscan but was already taken.")
+            for number in self.conn.sscan_iter(
+                self._get_free_pool_name(pool_id), match=pattern, count=10
+            ):
+                leased_number = self._lease_free_number(
+                    pool_id, number, request_context
+                )
+                if leased_number:
+                    return leased_number
+
+            dbg(f"No free number found for area code {area_code}, checking expired...")
+
+            max_expired_tries = 3
+            for number in self.conn.zrange(self._get_taken_pool_name(pool_id), 0, -1):
+                if not number.startswith(area_code):
                     continue
+
+                status, _ = self.get_number_status(number)
+                if status != NumberStatus.EXPIRED:
+                    dbg(
+                        f"Least recently renewed taken number {number} for {area_code} is not expired. Stopping search!"
+                    )
+                    break
+
+                dbg(f"Found expired number {number} matching area code {area_code}")
+                leased_number = self._lease_expired_number(
+                    pool_id, number, request_context
+                )
+                if leased_number:
+                    return leased_number
+
+                # This really shouldn't happen, but let it try a few times if needed
+                max_expired_tries -= 1
+                if max_expired_tries <= 0:
+                    warn(
+                        f"Max tries checking expired numbers for area code {area_code} in {pool_id}"
+                    )
+                    break
+
+            dbg(f"No free or expired number found for area code {area_code}")
 
         # If we didn't find a number, try the fallback area code
         if fallback_area_code not in area_codes:
