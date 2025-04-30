@@ -829,10 +829,20 @@ async def track_call(
             # Same session, use direct number ctx since it may be more up to date
             ctx = pool_ctx
         else:
-            # Different session, so likely a different user has this number now. Use
-            # the cached route context for this user.
-            ctx = route_ctx
-            from_route_cache = True
+            # Different session...
+            if pool_api.is_same_ip_user_agent(
+                pool_id, pool_ctx["request_context"], route_ctx["request_context"]
+            ):
+                ctx = pool_ctx
+                warn(
+                    f"{call_from} -> {call_to}: different sid but same IP/user agent, using number context"
+                )
+            else:
+                ctx = route_ctx
+                from_route_cache = True
+                warn(
+                    f"{call_from} -> {call_to}: different sid and different IP/user agent, using route context"
+                )
 
     if not ctx:
         if user_ctx:

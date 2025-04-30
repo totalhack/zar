@@ -39,6 +39,8 @@ LOCK_WAIT_TIMEOUT = 5
 LOCK_HOLD_TIMEOUT = 5
 INIT_LOCK_TIMEOUT = 2
 POOL_SESSION_KEY = "sid"
+POOL_IP_KEY = "ip"
+POOL_USER_AGENT_KEY = "user_agent"
 
 IGNORED_USER_CONTEXT_CALLER_IDS = {
     # Don't cache user context for these...
@@ -351,6 +353,15 @@ class NumberPoolAPI:
         key = self.get_static_number_key(number)
         self.conn.set(key, json.dumps(context))
 
+    def is_same_ip_user_agent(self, pool_id, req_ctx1, req_ctx2):
+        ip1 = self._get_session_ip(pool_id, req_ctx1)
+        ip2 = self._get_session_ip(pool_id, req_ctx2)
+        ua1 = self._get_session_user_agent(pool_id, req_ctx1)
+        ua2 = self._get_session_user_agent(pool_id, req_ctx2)
+        if not (ip1 and ip2 and ua1 and ua2):
+            return False
+        return (ip1 == ip2) and (ua1 == ua2)
+
     def get_all_pool_stats(self, with_contexts=False):
         stats = {}
         pools = self.get_pools_from_db()
@@ -565,6 +576,22 @@ class NumberPoolAPI:
         if not sid:
             return None
         return self.conn.hget(self._get_session_number_hash_name(pool_id), sid)
+
+    def _get_pool_ip_key(self, pool_id):
+        # TODO make this configurable per pool
+        return POOL_IP_KEY
+
+    def _get_session_ip(self, pool_id, request_context):
+        key = self._get_pool_ip_key(pool_id)
+        return request_context.get(key, None)
+
+    def _get_pool_user_agent_key(self, pool_id):
+        # TODO make this configurable per pool
+        return POOL_USER_AGENT_KEY
+
+    def _get_session_user_agent(self, pool_id, request_context):
+        key = self._get_pool_user_agent_key(pool_id)
+        return request_context.get(key, None)
 
     def _get_number_contexts(self, numbers, with_age=False):
         res = {}
