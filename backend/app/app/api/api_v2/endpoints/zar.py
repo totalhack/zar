@@ -60,6 +60,7 @@ SID_COOKIE_NAME = "_zar_sid"
 # This should line up with the pool max renewal time
 POOL_COOKIE_MAX_AGE = 7 * DAYS
 POOL_COOKIE_NAME = "_zar_pool"
+DEFAULT_GEO_MODE = "1"
 
 router = APIRouter()
 
@@ -122,6 +123,7 @@ def get_area_codes_from_context(context):
 
     parsed = urlparse(url)
     qs = parse_qs(parsed.query)
+
     loc_physical = qs.get(loc_physical_param, None)
     loc_interest = qs.get(loc_interest_param, None)
 
@@ -149,6 +151,12 @@ def get_area_codes_from_context(context):
         area_codes = CRITERIA_AREA_CODES.get(loc_interest, {}).get("area_codes", None)
         return area_codes or None
 
+    geo_mode = qs.get("gm", None)
+    if geo_mode:
+        geo_mode = geo_mode[0]
+    else:
+        geo_mode = DEFAULT_GEO_MODE
+
     if loc_physical and loc_interest:
         physical_data = CRITERIA_AREA_CODES.get(loc_physical, {})
         interest_data = CRITERIA_AREA_CODES.get(loc_interest, {})
@@ -160,15 +168,24 @@ def get_area_codes_from_context(context):
         if not physical_area_codes and not interest_area_codes:
             return None
 
-        # If both dont have state info, use physical area code
-        if not (physical_state and interest_state):
-            return physical_area_codes
+        if geo_mode == "1":
+            # If both dont have state info, use physical area code
+            if not (physical_state and interest_state):
+                return physical_area_codes
 
-        # If states are different, use physical area code
-        if physical_state != interest_state:
+            # If states are different, use physical area code
+            if physical_state != interest_state:
+                return physical_area_codes
+            else:
+                return interest_area_codes
+        elif geo_mode == "2":
+            # Always use physical
             return physical_area_codes
-        else:
+        elif geo_mode == "3":
+            # Always use interest
             return interest_area_codes
+        else:
+            rb_warning(f"unknown geo_mode {geo_mode}, url: {url}")
 
     return None
 

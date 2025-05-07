@@ -205,6 +205,28 @@ def test_endpoint_area_code_number_via_page(client: TestClient):
     print(number)
     assert number and number.startswith("401")
 
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Set geo_mode to 2, always use physical
+    # Use 9002212 in loc_physical with 1018455 (Wayland, MA) as interest
+    url = "http://localhost:8080/one?pl=1&loc_physical_ms=9002212&loc_interest_ms=1018455&gm=2"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("401")
+
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
+    # Set geo_mode to 3, always use interest
+    # Use 9002212 in loc_physical with 1018455 (Wayland, MA) as interest
+    url = "http://localhost:8080/one?pl=1&loc_physical_ms=9002212&loc_interest_ms=1018455&gm=3"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("339")
+
 
 SAMPLE_TRACK_REQUEST = {
     "type": "track",
