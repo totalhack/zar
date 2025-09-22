@@ -173,11 +173,11 @@ def get_area_codes_from_context(context):
             if not (physical_state and interest_state):
                 return physical_area_codes
 
-            # If states are different, use physical area code
+            # If states are different, favor physical area code
             if physical_state != interest_state:
                 return physical_area_codes
             else:
-                return interest_area_codes
+                return interest_area_codes or physical_area_codes
         elif geo_mode == "2":
             # Always use physical
             return physical_area_codes
