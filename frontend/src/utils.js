@@ -1,7 +1,7 @@
 export var urlParams = new URLSearchParams(window.location.search);
-var DEBUG = urlParams.get('zdbg');
+var DEBUG = urlParams.get("zdbg");
 var zarGlobal = {};
-const undef = 'undefined';
+const undef = "undefined";
 
 export function dbg() {
   if (DEBUG != 1) return;
@@ -9,35 +9,52 @@ export function dbg() {
 }
 
 export function warn(msg) {
-  console.warn(msg)
+  console.warn(msg);
   if (window.Rollbar) {
     window.Rollbar.warning(msg);
   }
 }
 
 export function isFunc(value) {
-  return value && (Object.prototype.toString.call(value) === "[object Function]" || "function" === typeof value || value instanceof Function);
+  return (
+    value &&
+    (Object.prototype.toString.call(value) === "[object Function]" ||
+      "function" === typeof value ||
+      value instanceof Function)
+  );
 }
 
 export function isBot() {
   try {
-    var ua = navigator.userAgent || ''
-    var bots = new RegExp([
-      /bot/, /spider/, /crawl/, /mediapartners/, /Google-Read-Aloud/, /semrush/
-    ].map((r) => r.source).join("|"), "i")
-    return bots.test(ua)
+    var ua = navigator.userAgent || "";
+    var bots = new RegExp(
+      [
+        /bot/,
+        /spider/,
+        /crawl/,
+        /mediapartners/,
+        /Google-Read-Aloud/,
+        /semrush/
+      ]
+        .map((r) => r.source)
+        .join("|"),
+      "i"
+    );
+    return bots.test(ua);
   } catch (e) {
-    return false
+    return false;
   }
 }
 
 export function afterDOMContentLoaded(func) {
-  if (document.readyState === "complete"
-    || document.readyState === "loaded"
-    || document.readyState === "interactive") {
-    func()
+  if (
+    document.readyState === "complete" ||
+    document.readyState === "loaded" ||
+    document.readyState === "interactive"
+  ) {
+    func();
   } else {
-    window.addEventListener('DOMContentLoaded', func);
+    window.addEventListener("DOMContentLoaded", func);
   }
 }
 
@@ -65,7 +82,7 @@ export function getSessionStorage(key) {
   var globalValue = zarGlobal[key];
   if (supportsSessionStorage) {
     value = sessionStorage.getItem(key);
-    if ((!value) && globalValue) {
+    if (!value && globalValue) {
       value = globalValue;
       // Restore session storage
       sessionStorage.setItem(key, value);
@@ -91,36 +108,6 @@ export function removeSessionStorage(key) {
     sessionStorage.removeItem(key);
   }
   delete zarGlobal[key];
-}
-
-export function hasAdBlock() {
-  // Create fake ad
-  var fakeAd = document.createElement('div');
-  fakeAd.innerHTML = '&nbsp;';
-  fakeAd.className = 'pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
-  fakeAd.setAttribute('style', 'width: 1px !important; height: 1px !important; position: absolute !important; left: -10000px !important; top: -1000px !important;');
-  try {
-    // insert into page
-    document.body.appendChild(fakeAd);
-    if (
-      document.body.getAttribute('abp') !== null ||
-      fakeAd.offsetHeight === 0 ||
-      fakeAd.clientHeight === 0
-    ) {
-      return true;
-    }
-    if (typeof getComputedStyle !== 'undefined') {
-      var css = window.getComputedStyle(fakeAd, null);
-      if (css && (css.getPropertyValue('display') === 'none' || css.getPropertyValue('visibility') === 'hidden')) {
-        return true;
-      }
-    }
-    // remove from page
-    document.body.removeChild(fakeAd);
-  } catch (e) {
-    // swallow errors
-  }
-  return false;
 }
 
 function makeRequest({ method, url, data, json = true }) {
@@ -163,27 +150,33 @@ function makeRequest({ method, url, data, json = true }) {
 }
 
 function formatParams(params) {
-  return "?" + Object
-    .keys(params)
-    .map(function (key) {
-      return key + "=" + encodeURIComponent(params[key]);
-    })
-    .join("&");
+  return (
+    "?" +
+    Object.keys(params)
+      .map(function (key) {
+        return key + "=" + encodeURIComponent(params[key]);
+      })
+      .join("&")
+  );
 }
 
 async function postBeacon({ url, data }) {
-  if (window &&
+  if (
+    window &&
     window.navigator &&
     typeof window.navigator.sendBeacon === "function" &&
-    typeof window.Blob === "function") {
+    typeof window.Blob === "function"
+  ) {
     try {
-      const blob = new Blob([JSON.stringify(data)], { type: 'text/plain; charset=UTF-8' });
+      const blob = new Blob([JSON.stringify(data)], {
+        type: "text/plain; charset=UTF-8"
+      });
       if (window.navigator.sendBeacon(url, blob)) {
         return true;
       }
       return false;
     } catch (e) {
-      warn("postBeacon:", e)
+      warn("postBeacon:", e);
       return false;
     }
   }
@@ -208,8 +201,7 @@ export async function httpPost({ url, data, json = true, beacon = false }) {
     if (res) {
       return;
     }
-    dbg('Beacon failed')
+    dbg("Beacon failed");
   }
   return await makeRequest({ method: "POST", url, data: finalData, json });
 }
-

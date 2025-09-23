@@ -22,7 +22,7 @@ const analytics = init({
     customDimensions: [
       {
         name: "vid",
-        callback: function(instance, config) {
+        callback: function (instance, config) {
           return instance.plugins.zar.getVID();
         }
       }
@@ -35,15 +35,15 @@ const analytics = init({
   poolConfig: {
     // poolId: 1, // Setting global pool ID is optional
     // poolId: function () { return 1 },
-    poolId: function() {
+    poolId: function () {
       return window.zarPoolId;
     },
     overlayQuerySelector: '.cta[data-cta-attr="phone"]',
     renewalInterval: 10 * 1000,
-    initCallback: function(x) {
+    initCallback: function (x) {
       console.log("init callback!", x);
     },
-    contextCallback: function(currentContext) {
+    contextCallback: function (currentContext) {
       var context = { url: window.location.href };
       if (currentContext) {
         context = Object.assign({}, currentContext, context);
@@ -54,10 +54,6 @@ const analytics = init({
   }
 });
 
-analytics.on("ready", () => {
-  console.log("hasAdBlock", analytics.plugins.zar.hasAdBlock());
-});
-
 Vue.prototype.$analytics = analytics;
 Vue.prototype.window = window;
 
@@ -65,10 +61,13 @@ router.beforeEach(updatePageTags);
 
 router.afterEach((to, from) => {
   console.log(`Route change to ${to.path} from ${from.path}`);
-  analytics.page();
+  // Wait for components to be created so route props are available
+  Vue.nextTick(() => {
+    analytics.page();
+  });
 });
 
 new Vue({
   router,
-  render: h => h(App)
+  render: (h) => h(App)
 }).$mount("#app");

@@ -14,12 +14,9 @@
       <a href="https://getanalytics.io/">View the analytics docs</a>
     </p>
     <pre>{{ JSON.stringify(storage, null, 2) }}</pre>
-    <button v-on:click="reset">Reset</button>
-    <button v-on:click="reload">Reload</button>
-    <button v-on:click="clear">Clear</button>
+    <button v-on:click="reload">Reload Storage</button>
     <button v-on:click="page">Trigger Page</button>
     <button v-on:click="track">Trigger Track</button>
-    <button v-on:click="identify">Trigger Identify</button>
   </div>
 </template>
 <script>
@@ -30,15 +27,6 @@ export default {
     };
   },
   methods: {
-    reset: async function () {
-      await this.$analytics.reset();
-      this.$analytics.plugins.zar.initIDs();
-      this.storage = this.$analytics.plugins.zar.getStorage();
-    },
-    clear: async function () {
-      await this.$analytics.reset();
-      this.storage = this.$analytics.plugins.zar.getStorage();
-    },
     reload: function () {
       this.storage = this.$analytics.plugins.zar.getStorage();
     },
@@ -46,10 +34,7 @@ export default {
       this.$analytics.page();
     },
     track: function () {
-      this.$analytics.track('event1', { attr1: 'val1', attr2: 'val2' });
-    },
-    identify: function () {
-      this.$analytics.identify('user@example.com', { attr1: 'val1', attr2: 'val2' });
+      this.$analytics.track("event1", { attr1: "val1", attr2: "val2" });
     }
   },
   mounted: function () {

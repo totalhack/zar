@@ -10,15 +10,28 @@
     <button v-on:click="updateContextVar">Update Context Var</button>
 
     <br />
-    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"><span>999-123-1234</span></a>
+    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"
+      ><span>999-123-1234</span></a
+    >
     <br />
-    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"><span>Call 999-123-1234 link</span></a>
+    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"
+      ><span>Call 999-123-1234 link</span></a
+    >
     <br />
-    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta">Call Now</a>
+    <a href="tel:+19991231234" data-cta-attr="phone" class="button cta"
+      >Call Now</a
+    >
     <br />
-    <a data-cta-attr="phone" href="tel:+19991231234" class="button cta button-w-icon hero-btn phone w-inline-block"><img
-        src="https://assets.website-files.com/62ade83a1a672b0b0eafa33d/62b55349ae2b454b71f603bc_phone.svg" loading="lazy"
-        alt="" class="btn-icon hero-btn" />
+    <a
+      data-cta-attr="phone"
+      href="tel:+19991231234"
+      class="button cta button-w-icon hero-btn phone w-inline-block"
+      ><img
+        src="https://assets.website-files.com/62ade83a1a672b0b0eafa33d/62b55349ae2b454b71f603bc_phone.svg"
+        loading="lazy"
+        alt=""
+        class="btn-icon hero-btn"
+      />
       <div class="text-block-3">999-123-1234</div>
     </a>
     <br />
@@ -26,9 +39,10 @@
     <br />
     <span data-cta-attr="phone" class="button cta">Call 999-123-1234 text</span>
     <br />
-    <span data-cta-attr="phone" class="button nocta">Call 999-123-1234 no CTA class</span>
+    <span data-cta-attr="phone" class="button nocta"
+      >Call 999-123-1234 no CTA class</span
+    >
     <pre>{{ JSON.stringify(poolStats, null, 2) }}</pre>
-
   </div>
 </template>
 <script>
@@ -49,28 +63,32 @@ export default {
       return document.querySelectorAll('.cta[data-cta-attr="phone"]');
     },
     overlayPhoneNumber: function () {
-      this.$analytics.plugins.zar.overlayPhoneNumber(
-        {
-          overlayElements: document.querySelectorAll('.nocta[data-cta-attr="phone"]'),
-          number: "1234567890"
-        }
-      );
+      this.$analytics.plugins.zar.overlayPhoneNumber({
+        overlayElements: document.querySelectorAll(
+          '.nocta[data-cta-attr="phone"]'
+        ),
+        number: "1234567890"
+      });
     },
     revertOverlay: function () {
-      this.$analytics.plugins.zar.revertOverlayNumbers({ overlayElements: this.ctas });
+      this.$analytics.plugins.zar.revertOverlayNumbers({
+        overlayElements: this.ctas
+      });
     },
     clearPoolInterval: function () {
-      console.log('clear interval', this.$props.poolId)
-      this.$analytics.plugins.zar.clearPoolInterval({ poolId: this.$props.poolId });
+      console.log("clear interval", this.$props.poolId);
+      this.$analytics.plugins.zar.clearPoolInterval({
+        poolId: this.$props.poolId
+      });
     },
     clearPoolIntervals: function () {
-      console.log('clear intervals')
-      this.$analytics.plugins.zar.clearPoolIntervals()
+      console.log("clear intervals");
+      this.$analytics.plugins.zar.clearPoolIntervals();
     },
     updateNumberContext: function () {
       this.$analytics.plugins.zar.updateTrackingNumberContext({
         number: window.zarPoolData.number,
-        context: { "test": new Date().toLocaleTimeString() }
+        context: { test: new Date().toLocaleTimeString() }
       });
 
       this.$nextTick(() => {
@@ -85,7 +103,17 @@ export default {
       });
     },
     refreshStats: async function () {
-      this.poolStats = await this.$analytics.plugins.zar.getPoolStats({ with_contexts: true });
+      this.poolStats = await this.$analytics.plugins.zar.getPoolStats({
+        with_contexts: true
+      });
+    }
+  },
+  created: function () {
+    // Earliest point where props are available in Vue 2
+    if (this && this.window) {
+      this.window.zarPoolId = this.$props.poolId;
+    } else if (typeof window !== "undefined") {
+      window.zarPoolId = this.$props.poolId;
     }
   },
   mounted: async function () {

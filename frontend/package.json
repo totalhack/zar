@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "description": "Zillion Analytics Recorder",
   "publishConfig": {
     "access": "public"
@@ -38,14 +38,16 @@
     "serve": "vite preview",
     "pub": "vite build && npm publish",
     "patch": "npm version patch --force --commit-hooks false",
-    "patchpub": "vite build && npm version patch --force --commit-hooks false && npm publish"
-  },
-  "dependencies": {
-    "analytics": "0.8.1"
+    "patchpub": "vite build && npm version patch --force --commit-hooks false && npm publish",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "vite": "2.9.4",
     "eslint": "^7.32.0",
-    "eslint-plugin-compat": "^3.13.0"
+    "eslint-plugin-compat": "^3.13.0",
+    "vite": "^4.3.0",
+    "jsdom": "^24.0.0",
+    "vitest": "^1.6.0"
   }
 }

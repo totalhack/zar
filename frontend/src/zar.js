@@ -1,11 +1,10 @@
-import { Analytics } from "analytics";
+import { Analytics } from "./analyticsLite";
 import { facebook } from "./facebook";
 import { googleAnalytics4 } from "./googleAnalytics4";
 import {
   dbg,
   getSessionStorage,
   setSessionStorage,
-  hasAdBlock,
   isBot,
   httpGet,
   httpPost,
@@ -203,9 +202,20 @@ function revertOverlayNumbers({ elems }) {
       dbg("orig:", origElemData);
       var origHTML = origElemData.html;
       dbg("reverting", currentHTML, "to", origHTML);
-      elems[i].innerHTML = origHTML;
+      // Prefer restoring original HTML; fall back to original text if HTML is empty/null
+      if (origHTML !== undefined && origHTML !== null && origHTML !== "") {
+        elems[i].innerHTML = origHTML;
+      } else if (
+        origElemData.text !== undefined &&
+        origElemData.text !== null
+      ) {
+        elems[i].textContent = origElemData.text;
+      } else {
+        // As a last resort, clear contents
+        elems[i].textContent = "";
+      }
       if (origElemData.href) {
-        elems[i].href = origElemData.href;
+        elems[i].setAttribute("href", origElemData.href);
       }
       numberOverlayMap.delete(elems[i]);
     } else {
@@ -521,16 +531,6 @@ function zar({ apiUrl, poolConfig }) {
       payload.properties.zar = getStorage();
       payload.properties.referrer = document.referrer;
       payload.properties.is_bot = isBot();
-      // Remove redundant values since url has all of this
-      if ("hash" in payload.properties) {
-        delete payload.properties["hash"];
-      }
-      if ("path" in payload.properties) {
-        delete payload.properties["path"];
-      }
-      if ("search" in payload.properties) {
-        delete payload.properties["search"];
-      }
 
       try {
         var pcfg = config.poolConfig;
@@ -602,9 +602,6 @@ function zar({ apiUrl, poolConfig }) {
       getVID() {
         return getID(VID_KEY);
       },
-      hasAdBlock() {
-        return hasAdBlock();
-      },
       isBot() {
         return isBot();
       },
@@ -667,7 +664,6 @@ function init({
   apiUrl = null,
   poolConfig = null
 }) {
-  // Opinionated init of Analytics
   if (!apiUrl) {
     apiUrl = getDefaultApiUrl();
   }
@@ -682,5 +678,14 @@ function init({
 
   return Analytics({ app, plugins });
 }
+
+// Internal test helpers export
+export const __test__ = {
+  extractPhoneNumber,
+  overlayPhoneNumber,
+  revertOverlayNumbers,
+  drainPoolDataLayer,
+  getPoolId
+};
 
 export { init, zar, Analytics };
