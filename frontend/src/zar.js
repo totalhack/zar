@@ -519,6 +519,24 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
       var renewalInterval =
         poolConfig.renewalInterval || NUMBER_POOL_RENEWAL_TIME_MS;
 
+      var interval = setInterval(function () {
+        try {
+          renewTrackingPool({
+            overlayElements,
+            apiUrl,
+            contextCallback: poolConfig.contextCallback
+          });
+        } catch (e) {
+          var msg = "error on interval: " + JSON.stringify(e);
+          warn(msg);
+        }
+      }, renewalInterval);
+
+      poolIntervals[poolData.pool_id] = interval;
+      if (poolConfig.initCallback) {
+        poolConfig.initCallback(poolData);
+      }
+
       var forceRenewOnReturn = function (opts = {}) {
         try {
           if (!poolActive()) return;
@@ -526,7 +544,6 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
             (opts.type === "vc" && document.visibilityState === "visible") ||
             (opts.type === "ps" && opts.persisted === true)
           ) {
-            console.log("renew on", opts.type);
             renewTrackingPool({
               overlayElements,
               apiUrl,
@@ -555,24 +572,6 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
         },
         { passive: true }
       );
-
-      var interval = setInterval(function () {
-        try {
-          renewTrackingPool({
-            overlayElements,
-            apiUrl,
-            contextCallback: poolConfig.contextCallback
-          });
-        } catch (e) {
-          var msg = "error on interval: " + JSON.stringify(e);
-          warn(msg);
-        }
-      }, renewalInterval);
-
-      poolIntervals[poolData.pool_id] = interval;
-      if (poolConfig.initCallback) {
-        poolConfig.initCallback(poolData);
-      }
     });
   }
 
