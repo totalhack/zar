@@ -20,6 +20,8 @@ var NUMBER_POOL_RENEWAL_TIME_MS = 30 * 1000;
 var getNumberFailureCount = 0;
 var MAX_GET_NUMBER_FAILURES = 3;
 var poolIntervals = {};
+var lastRenewalAttemptMs = {};
+var stopAllRenewals = false;
 
 window.zarPoolData = window.zarPoolData || null;
 window.zarPoolDLObserverDone = window.zarPoolDLObserverDone || false;
@@ -322,15 +324,31 @@ async function getPoolStats({ apiUrl, key = null, with_contexts = false }) {
 async function renewTrackingPool({
   overlayElements,
   apiUrl = getDefaultApiUrl(),
-  contextCallback = null
+  contextCallback = null,
+  checkLastRenewal = false,
+  renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS
 } = {}) {
-  var context = drainPoolDataLayer() || {};
-  if (contextCallback) {
-    context = contextCallback(context) || {};
+  if (stopAllRenewals) {
+    return { status: NUMBER_POOL_ERROR, msg: "stopped" };
   }
 
   const poolId = window.zarPoolData.pool_id;
   const number = window.zarPoolData.number;
+
+  // Skip if requested and the last attempt was too recent
+  var now = Date.now();
+  var last = lastRenewalAttemptMs[poolId];
+  var elbowRoom = 3 * 1000;
+  if (checkLastRenewal && last && now - last < renewalInterval + elbowRoom) {
+    return { status: NUMBER_POOL_SUCCESS };
+  }
+
+  lastRenewalAttemptMs[poolId] = now;
+
+  var context = drainPoolDataLayer() || {};
+  if (contextCallback) {
+    context = contextCallback(context) || {};
+  }
 
   try {
     var resp = await getPoolNumber({ poolId, apiUrl, number, context });
@@ -340,6 +358,7 @@ async function renewTrackingPool({
     getNumberFailureCount++;
     if (getNumberFailureCount >= MAX_GET_NUMBER_FAILURES) {
       warn("max failures, stopping pool");
+      stopAllRenewals = true;
       clearPoolIntervals();
       if (overlayElements) {
         revertOverlayNumbers({ elems: overlayElements });
@@ -427,6 +446,7 @@ function initPoolDataLayerObserver(apiUrl) {
 
 async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
   var msg;
+  stopAllRenewals = false;
 
   if (
     !poolConfig ||
@@ -473,10 +493,12 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
   window.zarPoolData = poolData;
 
   if (poolActive()) {
+    lastRenewalAttemptMs[poolId] = Date.now();
+
     try {
       initPoolDataLayerObserver(apiUrl);
     } catch (e) {
-      warn("data layer observer error: " + JSON.stringify(e));
+      warn("data layer error: " + JSON.stringify(e));
     }
 
     afterDOMContentLoaded(function () {
@@ -494,6 +516,46 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
 
       overlayPhoneNumber({ elems: overlayElements, number: poolData.number });
 
+      var renewalInterval =
+        poolConfig.renewalInterval || NUMBER_POOL_RENEWAL_TIME_MS;
+
+      var forceRenewOnReturn = function (opts = {}) {
+        try {
+          if (!poolActive()) return;
+          if (
+            (opts.type === "vc" && document.visibilityState === "visible") ||
+            (opts.type === "ps" && opts.persisted === true)
+          ) {
+            console.log("renew on", opts.type);
+            renewTrackingPool({
+              overlayElements,
+              apiUrl,
+              contextCallback: poolConfig.contextCallback,
+              checkLastRenewal: true,
+              renewalInterval
+            });
+          }
+        } catch (e) {
+          warn("error on renew: " + JSON.stringify(e));
+        }
+      };
+
+      document.addEventListener(
+        "visibilitychange",
+        function () {
+          forceRenewOnReturn({ type: "vc" });
+        },
+        { passive: true }
+      );
+
+      window.addEventListener(
+        "pageshow",
+        function (e) {
+          forceRenewOnReturn({ type: "ps", persisted: e && e.persisted });
+        },
+        { passive: true }
+      );
+
       var interval = setInterval(function () {
         try {
           renewTrackingPool({
@@ -505,7 +567,7 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
           var msg = "error on interval: " + JSON.stringify(e);
           warn(msg);
         }
-      }, poolConfig.renewalInterval || NUMBER_POOL_RENEWAL_TIME_MS);
+      }, renewalInterval);
 
       poolIntervals[poolData.pool_id] = interval;
       if (poolConfig.initCallback) {
