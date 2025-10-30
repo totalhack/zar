@@ -442,10 +442,21 @@ class NumberPoolAPI:
                             f"{request_sid}: target number {target_number} taken, renewal requested"
                         )
                         if request_context:
-                            # HACK: we can overwrite everything besides visits dict which needs to be merged
+                            # HACK: we can overwrite everything besides these dicts which need to be merged
+                            # such that the new request_context values take precedence. We should
+                            # probably change this to a more proper dict merge!
                             visits = ctx["request_context"].get("visits", None) or {}
                             visits.update(request_context.get("visits", None) or {})
                             request_context["visits"] = visits
+
+                            latest_context = (
+                                ctx["request_context"].get("latest_context", {}) or {}
+                            )
+                            latest_context.update(
+                                request_context.get("latest_context", {}) or {}
+                            )
+                            request_context["latest_context"] = latest_context
+
                             ctx["request_context"].update(request_context)
                         try:
                             res = self._renew_number(
