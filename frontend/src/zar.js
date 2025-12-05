@@ -761,4 +761,11 @@ export const __test__ = {
   getPoolId
 };
 
-export { init, zar, Analytics };
+export {
+  init,
+  zar,
+  Analytics,
+  getSessionStorage,
+  setSessionStorage,
+  afterDOMContentLoaded
+};

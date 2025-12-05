@@ -5,9 +5,8 @@
  * Prerequisites:
  * - Backend running at API_URL (default: http://localhost:8000/api/v2)
  * - A valid pool configured with POOL_ID
- * - POOL_KEY set for track_call auth
  *
- * Run with: VITE_E2E=1 POOL_KEY=your-key npm test -- test/e2e/sidContext.e2e.spec.js
+ * Run with: VITE_E2E=1 npm test -- test/e2e/sidContext.e2e.spec.js
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
