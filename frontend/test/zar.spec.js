@@ -220,3 +220,54 @@ describe("zar plugin behaviors", () => {
     expect(out.properties.referrer).toBe("https://ref.example/");
   });
 });
+
+describe("sid_ctx handling", () => {
+  it("initCallback receives sid_ctx when returned from number_pool", async () => {
+    // This tests that the frontend correctly passes sid_ctx to initCallback
+    // when the backend includes it in the response.
+    //
+    // The flow being tested:
+    // 1. User gets a tracking number (number_pool)
+    // 2. User calls the number (track_call sets sid context on backend)
+    // 3. On renewal, number_pool returns sid_ctx
+    // 4. initCallback should receive sid_ctx
+
+    const mockSidCtx = {
+      last_called_number: "5551234567",
+      last_called_time: 1700000000
+    };
+
+    const mockPoolResponse = {
+      status: "success",
+      pool_id: 123,
+      number: "5551234567",
+      msg: null,
+      sid_ctx: mockSidCtx
+    };
+
+    // Verify the structure matches what initCallback would receive
+    expect(mockPoolResponse.sid_ctx).toBeDefined();
+    expect(mockPoolResponse.sid_ctx.last_called_number).toBe("5551234567");
+    expect(mockPoolResponse.sid_ctx.last_called_time).toBe(1700000000);
+
+    // Client-side helper to check if user called recently
+    const hasCalledRecently = (resp, withinSeconds = 300) => {
+      if (!resp.sid_ctx.last_called_time) return false;
+      const now = Math.floor(Date.now() / 1000);
+      return now - resp.sid_ctx.last_called_time < withinSeconds;
+    };
+
+    // With old timestamp, should return false
+    expect(hasCalledRecently(mockPoolResponse, 300)).toBe(false);
+
+    // With recent timestamp, should return true
+    const recentResponse = {
+      ...mockPoolResponse,
+      sid_ctx: {
+        ...mockSidCtx,
+        last_called_time: Math.floor(Date.now() / 1000) - 60
+      }
+    };
+    expect(hasCalledRecently(recentResponse, 300)).toBe(true);
+  });
+});

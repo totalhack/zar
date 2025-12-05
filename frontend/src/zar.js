@@ -16,7 +16,8 @@ import {
 var VID_KEY = "__zar_vid";
 var NUMBER_POOL_SUCCESS = "success";
 var NUMBER_POOL_ERROR = "error";
-var NUMBER_POOL_RENEWAL_TIME_MS = 30 * 1000;
+var NUMBER_POOL_RENEWAL_INTERVAL_MS = 30 * 1000;
+var NUMBER_POOL_RENEWAL_MIN_TIME_MS = 10 * 1000;
 var getNumberFailureCount = 0;
 var MAX_GET_NUMBER_FAILURES = 3;
 var poolIntervals = {};
@@ -40,20 +41,23 @@ function generateVisitId() {
 function initId(key, generator, getter, setter) {
   var id;
   var isNew = false;
+  var t;
   var origReferrer = null;
   var idObj = getter(key);
 
   if (!idObj || !idObj.id) {
     id = generator();
     origReferrer = document.referrer;
+    t = Date.now();
     isNew = true;
     dbg("new ID for", key, "-", id);
   } else {
     id = idObj.id;
     origReferrer = idObj.origReferrer;
+    t = idObj.t;
   }
 
-  var result = { id, t: Date.now(), origReferrer, isNew };
+  var result = { id, t, origReferrer, isNew };
   setter(key, result);
   return result;
 }
@@ -325,8 +329,8 @@ async function renewTrackingPool({
   overlayElements,
   apiUrl = getDefaultApiUrl(),
   contextCallback = null,
-  checkLastRenewal = false,
-  renewalInterval = NUMBER_POOL_RENEWAL_TIME_MS
+  initCallback = null,
+  checkLastRenewal = true
 } = {}) {
   if (stopAllRenewals) {
     return { status: NUMBER_POOL_ERROR, msg: "stopped" };
@@ -338,8 +342,11 @@ async function renewTrackingPool({
   // Skip if requested and the last attempt was too recent
   var now = Date.now();
   var last = lastRenewalAttemptMs[poolId];
-  var elbowRoom = 3 * 1000;
-  if (checkLastRenewal && last && now - last < renewalInterval + elbowRoom) {
+  if (
+    checkLastRenewal &&
+    last &&
+    now - last < NUMBER_POOL_RENEWAL_MIN_TIME_MS
+  ) {
     return { status: NUMBER_POOL_SUCCESS };
   }
 
@@ -394,6 +401,11 @@ async function renewTrackingPool({
       clearInterval(poolIntervals[poolId]);
       delete poolIntervals[poolId];
     }
+  }
+
+  if (initCallback) {
+    resp.renew = true;
+    initCallback(resp);
   }
 
   return resp;
@@ -517,14 +529,15 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
       overlayPhoneNumber({ elems: overlayElements, number: poolData.number });
 
       var renewalInterval =
-        poolConfig.renewalInterval || NUMBER_POOL_RENEWAL_TIME_MS;
+        poolConfig.renewalInterval || NUMBER_POOL_RENEWAL_INTERVAL_MS;
 
       var interval = setInterval(function () {
         try {
           renewTrackingPool({
             overlayElements,
             apiUrl,
-            contextCallback: poolConfig.contextCallback
+            contextCallback: poolConfig.contextCallback,
+            initCallback: poolConfig.initCallback
           });
         } catch (e) {
           var msg = "error on interval: " + JSON.stringify(e);
@@ -548,8 +561,7 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
               overlayElements,
               apiUrl,
               contextCallback: poolConfig.contextCallback,
-              checkLastRenewal: true,
-              renewalInterval
+              initCallback: poolConfig.initCallback
             });
           }
         } catch (e) {

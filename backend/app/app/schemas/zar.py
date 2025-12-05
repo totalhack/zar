@@ -7,7 +7,7 @@ from tlbx import ClassValueContainsMeta
 class UserIDTypes(metaclass=ClassValueContainsMeta):
     PHONE = "phone"
     EMAIL = "email"
-    SESSION_ID = "session_id"
+    SID = "sid"  # Session ID
 
 
 class PageRequestBody(BaseModel):

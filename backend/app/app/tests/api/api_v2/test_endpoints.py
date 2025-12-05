@@ -515,3 +515,36 @@ def test_endpoint_set_static_number_contexts(client: TestClient) -> None:
     data = resp.json()
     pp(data)
     assert data.get("msg", {}).get("static_context", None)
+
+
+def test_endpoint_number_pool_renew_returns_sid_ctx(client: TestClient) -> None:
+    """Test that renewing a number returns sid_ctx after track_call."""
+    reset_pool(client)
+
+    # Step 1: Lease a number via page with pool
+    resp, data = page_with_pool(client)
+    assert data.get("pool_data", None) and data["pool_data"].get("number", None)
+    number = data["pool_data"]["number"]
+
+    # Step 2: Call track_call with the leased number
+    track_call_req = SAMPLE_TRACK_CALL_REQUEST.copy()
+    track_call_req["call_to"] = number
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+    assert resp.status_code == 200, resp.text
+    track_data = resp.json()
+    pp(track_data)
+    assert track_data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+
+    # Step 3: Renew the number via number_pool endpoint
+    renew_req = copy.deepcopy(SAMPLE_NUMBER_POOL_REQUEST)
+    renew_req["number"] = number
+    resp = client.post(f"{settings.API_V2_STR}/number_pool", json=renew_req)
+    assert resp.status_code == 200, resp.text
+    renew_data = resp.json()
+    pp(renew_data)
+
+    # Step 4: Confirm sid_ctx is returned
+    assert renew_data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+    assert "sid_ctx" in renew_data, "sid_ctx should be present in renewal response"
+    assert renew_data["sid_ctx"].get("last_called_number") == number
+    assert renew_data["sid_ctx"].get("last_called_time") is not None

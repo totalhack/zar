@@ -373,7 +373,11 @@ async def page(
         pool_data = handle_pool_request(
             zar, body["properties"], _zar_pool, headers, request, response
         )
-        body["properties"]["pool_data"] = pool_data
+        if pool_data:
+            sid_ctx = pool_api.get_user_context("sid", sid)
+            if sid_ctx:
+                pool_data["sid_ctx"] = sid_ctx
+            body["properties"]["pool_data"] = pool_data
     except Exception as e:
         rb_error(f"handle_pool_request failed: {str(e)}", request=request)
 
@@ -576,6 +580,10 @@ def number_pool(
         pool_sesh = dict(enabled=True, numbers={pool_id: res})
         max_age = body["properties"].get("pool_max_age", POOL_COOKIE_MAX_AGE)
         set_pool_cookie(response, pool_sesh, headers, max_age=max_age)
+
+    sid_ctx = pool_api.get_user_context("sid", sid)
+    if sid_ctx:
+        res["sid_ctx"] = sid_ctx
 
     info(f"took: {time.time() - start:0.3f}s, {res}")
     return res
@@ -829,6 +837,7 @@ async def track_call(
             info(f"{call_from} -> {call_to}: found static number context")
             return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
 
+    sid = None
     if (not pool_ctx) and route_ctx:
         # No active context found for this tracking number but we have a cached
         # context from this user calling this number before.
@@ -836,6 +845,8 @@ async def track_call(
         from_route_cache = True
     elif pool_ctx and not route_ctx:
         ctx = pool_ctx
+        pool_id = pool_ctx["pool_id"]
+        sid = pool_api._get_session_id(pool_id, pool_ctx["request_context"])
     elif pool_ctx and route_ctx:
         # There is an active context and a cached context. If the SID of number context
         # and route context match, its the same user and we use the updated context.
@@ -845,18 +856,21 @@ async def track_call(
         if number_sid == route_sid:
             # Same session, use direct number ctx since it may be more up to date
             ctx = pool_ctx
+            sid = number_sid
         else:
             # Different session...
             if pool_api.is_same_ip_user_agent(
                 pool_id, pool_ctx["request_context"], route_ctx["request_context"]
             ):
                 ctx = pool_ctx
+                sid = number_sid
                 warn(
                     f"{call_from} -> {call_to}: different sid but same IP/user agent, using number context"
                 )
             else:
                 ctx = route_ctx
                 from_route_cache = True
+                sid = route_sid
                 warn(
                     f"{call_from} -> {call_to}: different sid and different IP/user agent, using route context"
                 )
@@ -891,6 +905,17 @@ async def track_call(
                 f"Failed to calculate zip {ctx_zip} to area code {user_area_code} distance: {str(e)}",
                 request=request,
             )
+
+    if sid:
+        # We maintain a separate user context by sid that site sessions can use.
+        pool_api.update_user_context(
+            "sid",
+            sid,
+            {
+                "last_called_number": call_to,
+                "last_called_time": int(time.time()),
+            },
+        )
 
     if user_ctx:
         ctx["user_context"] = user_ctx

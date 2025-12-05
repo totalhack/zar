@@ -1,6 +1,6 @@
 {
   "name": "zar",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Zillion Analytics Recorder",
   "publishConfig": {
     "access": "public"
@@ -40,6 +40,7 @@
     "patch": "npm version patch --force --commit-hooks false",
     "patchpub": "vite build && npm version patch --force --commit-hooks false && npm publish",
     "test": "vitest run",
+    "test:e2e": "VITE_E2E=1 vitest run e2e",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage"
   },
