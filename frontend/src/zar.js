@@ -636,11 +636,9 @@ function zar({ apiUrl, poolConfig }) {
         var pcfg = config.poolConfig;
         if (pcfg && pcfg.poolId) {
           payload.properties.pool_id = getPoolId(pcfg.poolId);
-          var context = drainPoolDataLayer() || {};
-          if (pcfg.contextCallback) {
-            payload.properties.pool_context =
-              pcfg.contextCallback(context) || {};
-          }
+          payload.properties.pool_context = buildPoolContext({
+            contextCallback: pcfg.contextCallback
+          });
         }
       } catch (e) {
         warn("error getting pool id: " + JSON.stringify(e));
