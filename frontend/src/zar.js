@@ -18,6 +18,9 @@ var NUMBER_POOL_SUCCESS = "success";
 var NUMBER_POOL_ERROR = "error";
 var NUMBER_POOL_RENEWAL_INTERVAL_MS = 30 * 1000;
 var NUMBER_POOL_RENEWAL_MIN_TIME_MS = 10 * 1000;
+// Persist last known merged pool context so renewals still include it.
+var POOL_LAST_CTX_KEY = "__zar_pool_last_ctx";
+
 var getNumberFailureCount = 0;
 var MAX_GET_NUMBER_FAILURES = 3;
 var poolIntervals = {};
@@ -290,6 +293,32 @@ function drainPoolDataLayer() {
   return mergedObject;
 }
 
+function getLastPoolContext() {
+  return getSessionStorage(POOL_LAST_CTX_KEY) || {};
+}
+
+function setLastPoolContext(ctx) {
+  if (!ctx) return;
+  // Minimal guard: only persist plain objects
+  if (typeof ctx !== "object") return;
+  setSessionStorage(POOL_LAST_CTX_KEY, ctx);
+}
+
+function buildPoolContext({ contextCallback = null } = {}) {
+  // Merge last-known with any newly-pushed items; new values win.
+  var last = getLastPoolContext() || {};
+  var drained = drainPoolDataLayer() || {};
+  var merged = Object.assign({}, last, drained);
+
+  if (contextCallback) {
+    // Let callback override final merged context (but don’t lose persistence)
+    merged = contextCallback(merged) || {};
+  }
+
+  setLastPoolContext(merged);
+  return merged;
+}
+
 async function updateTrackingNumberContext({
   apiUrl,
   poolId,
@@ -352,10 +381,7 @@ async function renewTrackingPool({
 
   lastRenewalAttemptMs[poolId] = now;
 
-  var context = drainPoolDataLayer() || {};
-  if (contextCallback) {
-    context = contextCallback(context) || {};
-  }
+  var context = buildPoolContext({ contextCallback });
 
   try {
     var resp = await getPoolNumber({ poolId, apiUrl, number, context });
@@ -428,10 +454,13 @@ function initPoolDataLayerObserver(apiUrl) {
   var originalPush = window.zarPoolDataLayer.push;
   window.zarPoolDataLayer.push = function (...args) {
     var result = originalPush.apply(this, args);
-    var context = drainPoolDataLayer();
+
+    // Persist any new context immediately (even if update call fails)
+    var context = buildPoolContext({ contextCallback: null });
     if (!context) {
       return result;
     }
+
     updateTrackingNumberContext({
       apiUrl,
       poolId: window.zarPoolData.pool_id,
@@ -441,10 +470,9 @@ function initPoolDataLayerObserver(apiUrl) {
     return result;
   };
 
-  // Do an initial drain in case data was added between contextCallback
-  // and the observer being set up.
-  var context = drainPoolDataLayer();
-  if (context) {
+  // Do an initial drain (and persist) in case data was added before observer setup.
+  var context = buildPoolContext({ contextCallback: null });
+  if (context && Object.keys(context).length > 0) {
     updateTrackingNumberContext({
       apiUrl,
       poolId: window.zarPoolData.pool_id,
@@ -485,10 +513,9 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
   }
 
   if (!poolData) {
-    var context = drainPoolDataLayer() || {};
-    if (poolConfig.contextCallback) {
-      context = poolConfig.contextCallback(context) || {};
-    }
+    var context = buildPoolContext({
+      contextCallback: poolConfig.contextCallback
+    });
 
     try {
       poolData = await getPoolNumber({ poolId, apiUrl, number: null, context });

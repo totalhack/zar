@@ -97,7 +97,7 @@ export default {
     },
     updateContextVar: function () {
       var date = new Date().toLocaleTimeString();
-      window.zarPoolDataLayer.push({ [date]: date });
+      window.zarPoolDataLayer.push({ date: date });
       this.$nextTick(() => {
         this.refreshStats();
       });
