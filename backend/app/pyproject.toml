@@ -7,7 +7,7 @@ authors = ["Admin <admin@example.com>"]
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 uvicorn = "^0.34.0"
-fastapi = "^0.115.8"
+fastapi = "^0.131.0"
 requests = "^2.23.0"
 tenacity = "^6.1.0"
 pydantic = "^2.10.6"
@@ -22,7 +22,6 @@ redis = "^3.5.3"
 tlbx = ">= 0.1.21"
 # https://github.com/python-poetry/poetry/issues/2687
 black = "^19.10b0"
-orjson = "3.9.15"
 rollbar = "^1.2.0"
 pgeocode = "0.5.0"
 

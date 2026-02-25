@@ -122,6 +122,35 @@ def test_endpoint_page_v2(client: TestClient):
     assert sid5 == sid4
 
 
+# def test_endpoint_page_v2_performance(client: TestClient) -> None:
+#     request_count = 1000
+#     settings.DEBUG = False
+
+#     import logging
+
+#     logging.getLogger("databases").setLevel(logging.WARNING)
+#     logging.getLogger("databases:mysql").setLevel(logging.WARNING)
+
+#     req = copy.deepcopy(SAMPLE_PAGE_REQUEST)
+#     req["properties"]["url"] = "http://localhost:8080/perf?s=1"
+
+#     start = time.perf_counter()
+#     for _ in range(request_count):
+#         resp = client.post(f"{settings.API_V2_STR}/page", json=req)
+#         assert resp.status_code == 200, resp.text
+
+#     total_seconds = time.perf_counter() - start
+#     requests_per_second = request_count / total_seconds if total_seconds else 0.0
+#     pp(
+#         {
+#             "request_count": request_count,
+#             "total_seconds": total_seconds,
+#             "requests_per_second": requests_per_second,
+#         }
+#     )
+#     settings.DEBUG = True
+
+
 def test_endpoint_number_via_page(client: TestClient):
     resp, data = page_with_pool(client)
     assert data.get("pool_data", None) and data["pool_data"].get("number", None)

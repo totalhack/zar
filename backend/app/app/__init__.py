@@ -1,9 +1,6 @@
 from contextlib import asynccontextmanager
-import typing
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-import orjson
 import uvicorn.protocols.utils
 
 from app.core.config import settings
@@ -36,14 +33,6 @@ def get_real_client_addr(scope):
 uvicorn.protocols.utils.get_client_addr = get_real_client_addr
 
 
-# https://github.com/tiangolo/fastapi/issues/459#issuecomment-536781105
-class ORJSONResponse(JSONResponse):
-    media_type = "application/json"
-
-    def render(self, content: typing.Any) -> bytes:
-        return orjson.dumps(content, option=orjson.OPT_NON_STR_KEYS)
-
-
 @asynccontextmanager
 async def lifespan(app):
     await database.connect()
@@ -61,6 +50,5 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.ENABLE_DOCS else None,
     docs_url=None,  # Swagger docs
     redoc_url="/docs" if settings.ENABLE_DOCS else None,  # redocs
-    default_response_class=ORJSONResponse,
     lifespan=lifespan,
 )
