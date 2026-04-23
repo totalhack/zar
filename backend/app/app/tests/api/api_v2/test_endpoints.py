@@ -1,5 +1,7 @@
 import copy
+import json
 import time
+from urllib.parse import quote
 
 from fastapi.testclient import TestClient
 from tlbx import st, pp
@@ -237,6 +239,16 @@ def test_endpoint_area_code_number_via_page(client: TestClient):
     reset_pool(client, pool_id=pool_id)
     client.cookies.clear()
 
+    # Test bing again with second bin ID
+    url = "http://localhost:8080/one?s=bing2&pl=1&loc_physical_ms=63978"
+    resp, data = page_with_pool(client, pool_id=pool_id, url=url)
+    number = data.get("pool_data", None) and data["pool_data"].get("number", None)
+    print(number)
+    assert number and number.startswith("401")
+
+    reset_pool(client, pool_id=pool_id)
+    client.cookies.clear()
+
     # Set geo_mode to 2, always use physical
     # Use 9002212 in loc_physical with 1018455 (Wayland, MA) as interest
     url = "http://localhost:8080/one?pl=1&loc_physical_ms=9002212&loc_interest_ms=1018455&gm=2"
@@ -396,6 +408,34 @@ def test_endpoint_number_session_expired(client: TestClient) -> None:
     data = resp.json()
     pp(data)
     assert data["status"] == NumberPoolResponseStatus.ERROR and data["msg"] == "expired"
+
+
+def test_endpoint_page_ignores_cached_pool_error(client: TestClient) -> None:
+    reset_pool(client)
+
+    client.cookies.set(
+        "_zar_pool",
+        quote(
+            json.dumps(
+                {
+                    "enabled": True,
+                    "numbers": {
+                        "1": {
+                            "status": NumberPoolResponseStatus.ERROR,
+                            "pool_id": 1,
+                            "number": None,
+                            "msg": "pool unavailable",
+                        }
+                    },
+                }
+            )
+        ),
+    )
+
+    resp, data = page_with_pool(client, pool_id=1)
+    assert data.get("pool_data", None)
+    assert data["pool_data"]["status"] == NumberPoolResponseStatus.SUCCESS
+    assert data["pool_data"].get("number", None)
 
 
 SAMPLE_TRACK_CALL_REQUEST = {

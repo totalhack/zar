@@ -290,7 +290,14 @@ class NumberPoolAPI:
     def get_cached_route_key(self, call_from, call_to):
         return f"{call_from}->{call_to}"
 
+    def _is_ignored_phone_user_id(self, user_id):
+        if user_id is None:
+            return False
+        return user_id.lower().lstrip("+") in IGNORED_USER_CONTEXT_CALLER_IDS
+
     def set_cached_route_context(self, call_from, call_to, context):
+        if self._is_ignored_phone_user_id(call_from):
+            return
         context = NumberPoolCacheValue(**context)
         key = self.get_cached_route_key(call_from, call_to)
         self.conn.set(
@@ -298,6 +305,8 @@ class NumberPoolAPI:
         )
 
     def get_cached_route_context(self, call_from, call_to):
+        if self._is_ignored_phone_user_id(call_from):
+            return None
         key = self.get_cached_route_key(call_from, call_to)
         res = self.conn.get(key)
         return json.loads(res) if res else None
@@ -306,20 +315,14 @@ class NumberPoolAPI:
         return f"{id_type}:{user_id}"
 
     def get_user_context(self, id_type, user_id):
-        if (
-            id_type == UserIDTypes.PHONE
-            and user_id.lower().lstrip("+") in IGNORED_USER_CONTEXT_CALLER_IDS
-        ):
+        if id_type == UserIDTypes.PHONE and self._is_ignored_phone_user_id(user_id):
             return None
         key = self.get_user_context_key(id_type, user_id)
         res = self.conn.get(key)
         return json.loads(res) if res else None
 
     def set_user_context(self, id_type, user_id, context):
-        if (
-            id_type == UserIDTypes.PHONE
-            and user_id.lower().lstrip("+") in IGNORED_USER_CONTEXT_CALLER_IDS
-        ):
+        if id_type == UserIDTypes.PHONE and self._is_ignored_phone_user_id(user_id):
             return
         key = self.get_user_context_key(id_type, user_id)
         self.conn.set(key, json.dumps(context), ex=NUMBER_POOL_USER_CONTEXT_EXPIRATION)
@@ -333,10 +336,7 @@ class NumberPoolAPI:
         return context
 
     def remove_user_context(self, id_type, user_id):
-        if (
-            id_type == UserIDTypes.PHONE
-            and user_id.lower().lstrip("+") in IGNORED_USER_CONTEXT_CALLER_IDS
-        ):
+        if id_type == UserIDTypes.PHONE and self._is_ignored_phone_user_id(user_id):
             return
         key = self.get_user_context_key(id_type, user_id)
         self.conn.delete(key)
@@ -676,6 +676,15 @@ class NumberPoolAPI:
     def _remove_numbers(self, pool_id, numbers):
         """Completely remove numbers from the pool"""
         info(f"removing {len(numbers)} numbers from the pool")
+        sids = []
+        for number in numbers:
+            ctx = self.get_pool_number_context(number)
+            if not ctx:
+                continue
+            sid = self._get_session_id(pool_id, ctx.get("request_context", {}) or {})
+            if sid:
+                sids.append(sid)
+
         # remove from taken
         self.conn.zrem(self._get_taken_pool_name(pool_id), *numbers)
         # remove from keys
@@ -683,12 +692,6 @@ class NumberPoolAPI:
         # remove from free
         self.conn.srem(self._get_free_pool_name(pool_id), *numbers)
         # remove session -> number mappings
-        sids = []
-        for number in numbers:
-            ctx = self.get_pool_number_context(number)
-            if not ctx:
-                continue
-            sids.append(self._get_session_id(pool_id, ctx["request_context"]))
         if sids:
             self.conn.hdel(self._get_session_number_hash_name(pool_id), *sids)
 

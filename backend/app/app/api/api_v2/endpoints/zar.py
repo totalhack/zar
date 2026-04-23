@@ -296,8 +296,8 @@ def handle_pool_request(zar, props, cookie, headers, request, response):
     if pool_sesh and str(pool_id) in pool_sesh["numbers"]:
         sesh_result = pool_sesh["numbers"][str(pool_id)]
         if sesh_result["status"] != NumberPoolResponseStatus.SUCCESS:
-            warn(f"Returning cached unsuccessful pool result: {sesh_result}")
-            return sesh_result
+            warn(f"Ignoring cached unsuccessful pool result: {sesh_result}")
+            pool_sesh["numbers"].pop(str(pool_id), None)
 
         if sesh_result["number"]:
             pool_number = sesh_result["number"]
@@ -318,10 +318,13 @@ def handle_pool_request(zar, props, cookie, headers, request, response):
 
     # NOTE: numeric pool IDs get coerced to str in json.dumps, so we need to
     # to read and write as str when dealing with the cookie value.
-    if pool_sesh:
+    if not pool_sesh:
+        pool_sesh = dict(enabled=True, numbers={})
+
+    if pool_resp["status"] == NumberPoolResponseStatus.SUCCESS:
         pool_sesh.setdefault("numbers", {})[str(pool_id)] = pool_resp
     else:
-        pool_sesh = dict(enabled=True, numbers={str(pool_id): pool_resp})
+        pool_sesh.setdefault("numbers", {}).pop(str(pool_id), None)
 
     max_age = props.get("pool_max_age", POOL_COOKIE_MAX_AGE)
     set_pool_cookie(response, pool_sesh, headers, max_age=max_age)

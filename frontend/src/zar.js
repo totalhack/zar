@@ -293,20 +293,24 @@ function drainPoolDataLayer() {
   return mergedObject;
 }
 
-function getLastPoolContext() {
-  return getSessionStorage(POOL_LAST_CTX_KEY) || {};
+function getPoolContextStorageKey(poolId = null) {
+  return poolId ? `${POOL_LAST_CTX_KEY}:${poolId}` : POOL_LAST_CTX_KEY;
 }
 
-function setLastPoolContext(ctx) {
+function getLastPoolContext(poolId = null) {
+  return getSessionStorage(getPoolContextStorageKey(poolId)) || {};
+}
+
+function setLastPoolContext(ctx, poolId = null) {
   if (!ctx) return;
   // Minimal guard: only persist plain objects
   if (typeof ctx !== "object") return;
-  setSessionStorage(POOL_LAST_CTX_KEY, ctx);
+  setSessionStorage(getPoolContextStorageKey(poolId), ctx);
 }
 
-function buildPoolContext({ contextCallback = null } = {}) {
+function buildPoolContext({ contextCallback = null, poolId = null } = {}) {
   // Merge last-known with any newly-pushed items; new values win.
-  var last = getLastPoolContext() || {};
+  var last = getLastPoolContext(poolId) || {};
   var drained = drainPoolDataLayer() || {};
   var merged = Object.assign({}, last, drained);
 
@@ -315,7 +319,7 @@ function buildPoolContext({ contextCallback = null } = {}) {
     merged = contextCallback(merged) || {};
   }
 
-  setLastPoolContext(merged);
+  setLastPoolContext(merged, poolId);
   return merged;
 }
 
@@ -381,7 +385,7 @@ async function renewTrackingPool({
 
   lastRenewalAttemptMs[poolId] = now;
 
-  var context = buildPoolContext({ contextCallback });
+  var context = buildPoolContext({ contextCallback, poolId });
 
   try {
     var resp = await getPoolNumber({ poolId, apiUrl, number, context });
@@ -401,6 +405,7 @@ async function renewTrackingPool({
   }
 
   if (resp.status === NUMBER_POOL_SUCCESS && resp.number) {
+    getNumberFailureCount = 0;
     var force = false;
     if (resp.number !== window.zarPoolData.number) {
       warn(
@@ -456,7 +461,10 @@ function initPoolDataLayerObserver(apiUrl) {
     var result = originalPush.apply(this, args);
 
     // Persist any new context immediately (even if update call fails)
-    var context = buildPoolContext({ contextCallback: null });
+    var context = buildPoolContext({
+      contextCallback: null,
+      poolId: window.zarPoolData.pool_id
+    });
     if (!context) {
       return result;
     }
@@ -471,7 +479,10 @@ function initPoolDataLayerObserver(apiUrl) {
   };
 
   // Do an initial drain (and persist) in case data was added before observer setup.
-  var context = buildPoolContext({ contextCallback: null });
+  var context = buildPoolContext({
+    contextCallback: null,
+    poolId: window.zarPoolData.pool_id
+  });
   if (context && Object.keys(context).length > 0) {
     updateTrackingNumberContext({
       apiUrl,
@@ -514,7 +525,8 @@ async function initTrackingPool({ poolData, poolConfig, apiUrl } = {}) {
 
   if (!poolData) {
     var context = buildPoolContext({
-      contextCallback: poolConfig.contextCallback
+      contextCallback: poolConfig.contextCallback,
+      poolId
     });
 
     try {
@@ -637,7 +649,8 @@ function zar({ apiUrl, poolConfig }) {
         if (pcfg && pcfg.poolId) {
           payload.properties.pool_id = getPoolId(pcfg.poolId);
           payload.properties.pool_context = buildPoolContext({
-            contextCallback: pcfg.contextCallback
+            contextCallback: pcfg.contextCallback,
+            poolId: payload.properties.pool_id
           });
         }
       } catch (e) {
@@ -783,7 +796,17 @@ export const __test__ = {
   overlayPhoneNumber,
   revertOverlayNumbers,
   drainPoolDataLayer,
-  getPoolId
+  getPoolId,
+  renewTrackingPool,
+  resetPoolStateForTests: function () {
+    getNumberFailureCount = 0;
+    poolIntervals = {};
+    lastRenewalAttemptMs = {};
+    stopAllRenewals = false;
+    window.zarPoolData = null;
+    window.zarPoolDLObserverDone = false;
+    window.zarPoolDataLayer = [];
+  }
 };
 
 export {

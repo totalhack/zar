@@ -2,6 +2,13 @@
 // @vitest-environment-options { "url": "https://example.com/?zdbg=1" }
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+const { httpPostMock, getSessionStorageMock, setSessionStorageMock } =
+  vi.hoisted(() => ({
+    httpPostMock: vi.fn(async () => ({})),
+    getSessionStorageMock: vi.fn(() => null),
+    setSessionStorageMock: vi.fn()
+  }));
+
 // Keep mocks consistent with existing test file
 vi.mock("../src/facebook", () => ({ facebook: () => ({ name: "facebook" }) }));
 vi.mock("../src/googleAnalytics4", () => ({
@@ -14,21 +21,42 @@ vi.mock("../src/utils", () => ({
   isBot: () => false,
   hasAdBlock: () => false,
   httpGet: async () => ({}),
-  httpPost: async () => ({}),
-  getSessionStorage: () => null,
-  setSessionStorage: () => {},
+  httpPost: httpPostMock,
+  getSessionStorage: getSessionStorageMock,
+  setSessionStorage: setSessionStorageMock,
   isFunc: (f) => typeof f === "function"
 }));
 
 import { __test__, zar } from "../src/zar.js";
+
+let sessionStorageState;
 
 const {
   extractPhoneNumber,
   overlayPhoneNumber,
   revertOverlayNumbers,
   drainPoolDataLayer,
-  getPoolId
+  getPoolId,
+  renewTrackingPool,
+  resetPoolStateForTests
 } = __test__;
+
+beforeEach(() => {
+  httpPostMock.mockReset();
+  httpPostMock.mockResolvedValue({});
+  getSessionStorageMock.mockReset();
+  setSessionStorageMock.mockReset();
+  sessionStorageState = {};
+  getSessionStorageMock.mockImplementation((key) =>
+    Object.prototype.hasOwnProperty.call(sessionStorageState, key)
+      ? sessionStorageState[key]
+      : null
+  );
+  setSessionStorageMock.mockImplementation((key, value) => {
+    sessionStorageState[key] = value;
+  });
+  resetPoolStateForTests();
+});
 
 describe("extractPhoneNumber", () => {
   it("finds and normalizes US phone numbers and tel: href", () => {
@@ -207,6 +235,51 @@ describe("zar plugin behaviors", () => {
     expect(out.properties.pool_context).toEqual({ k: 2, extra: true });
   });
 
+  it("keeps cached pool context isolated per pool id", () => {
+    const pluginA = zar({
+      apiUrl: "https://api.example",
+      poolConfig: {
+        poolId: () => "pool-a",
+        contextCallback: (ctx) => ({ ...ctx, pool: "a" })
+      }
+    });
+
+    window.zarPoolDataLayer = [{ a: 1 }];
+    const payloadA = { properties: {} };
+    const outA = pluginA.pageStart({
+      payload: payloadA,
+      config: pluginA.config,
+      instance: {}
+    });
+
+    expect(outA.properties.pool_context).toEqual({ a: 1, pool: "a" });
+
+    const pluginB = zar({
+      apiUrl: "https://api.example",
+      poolConfig: {
+        poolId: () => "pool-b",
+        contextCallback: (ctx) => ({ ...ctx, pool: "b" })
+      }
+    });
+
+    window.zarPoolDataLayer = [];
+    const payloadB = { properties: {} };
+    const outB = pluginB.pageStart({
+      payload: payloadB,
+      config: pluginB.config,
+      instance: {}
+    });
+
+    expect(outB.properties.pool_context).toEqual({ pool: "b" });
+    expect(sessionStorageState["__zar_pool_last_ctx:pool-a"]).toEqual({
+      a: 1,
+      pool: "a"
+    });
+    expect(sessionStorageState["__zar_pool_last_ctx:pool-b"]).toEqual({
+      pool: "b"
+    });
+  });
+
   it("trackStart sets url and referrer on payload.properties", () => {
     const plugin = zar({ apiUrl: "https://api.example", poolConfig: null });
     const payload = { properties: {} };
@@ -269,5 +342,58 @@ describe("sid_ctx handling", () => {
       }
     };
     expect(hasCalledRecently(recentResponse, 300)).toBe(true);
+  });
+});
+
+describe("renewTrackingPool failure recovery", () => {
+  it("resets failure count after a successful renewal", async () => {
+    window.zarPoolData = {
+      status: "success",
+      pool_id: 123,
+      number: "5551234567"
+    };
+
+    httpPostMock
+      .mockRejectedValueOnce(new Error("fail 1"))
+      .mockRejectedValueOnce(new Error("fail 2"))
+      .mockResolvedValueOnce({
+        status: "success",
+        pool_id: 123,
+        number: "5551234567"
+      })
+      .mockRejectedValueOnce(new Error("fail 3"))
+      .mockRejectedValueOnce(new Error("fail 4"));
+
+    let resp = await renewTrackingPool({
+      apiUrl: "https://api.example",
+      checkLastRenewal: false
+    });
+    expect(resp.status).toBe("error");
+
+    resp = await renewTrackingPool({
+      apiUrl: "https://api.example",
+      checkLastRenewal: false
+    });
+    expect(resp.status).toBe("error");
+
+    resp = await renewTrackingPool({
+      apiUrl: "https://api.example",
+      checkLastRenewal: false
+    });
+    expect(resp.status).toBe("success");
+
+    resp = await renewTrackingPool({
+      apiUrl: "https://api.example",
+      checkLastRenewal: false
+    });
+    expect(resp.status).toBe("error");
+    expect(resp.msg).not.toBe("stopped");
+
+    resp = await renewTrackingPool({
+      apiUrl: "https://api.example",
+      checkLastRenewal: false
+    });
+    expect(resp.status).toBe("error");
+    expect(resp.msg).not.toBe("stopped");
   });
 });

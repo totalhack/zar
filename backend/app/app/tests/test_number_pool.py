@@ -200,6 +200,40 @@ def test_pool_multi_pool_sid():
     assert len(taken) == 1
 
 
+def test_pool_reset_removes_stale_session_number_map():
+    pool_api._reset_pool(DEFAULT_POOL_ID, preserve=False)
+
+    ctx = dict(sid="1234", visits={1: dict(foo="bar")})
+    num = pool_api.lease_number(DEFAULT_POOL_ID, ctx)
+    assert num
+    assert pool_api._get_session_number(DEFAULT_POOL_ID, ctx) == num
+
+    remaining_numbers = pool_api._get_pool_numbers(DEFAULT_POOL_ID) - {num}
+    pool_api._reset_pool(DEFAULT_POOL_ID, numbers=remaining_numbers, preserve=True)
+
+    assert pool_api._get_session_number(DEFAULT_POOL_ID, ctx) is None
+
+    new_num = pool_api.lease_number(DEFAULT_POOL_ID, ctx)
+    assert new_num
+    assert new_num != num
+    assert new_num in remaining_numbers
+
+
+def test_pool_route_cache_ignores_anonymous_callers():
+    context = dict(
+        pool_id=DEFAULT_POOL_ID,
+        leased_at=time.time(),
+        renewed_at=time.time(),
+        request_context=dict(sid="1234"),
+    )
+
+    pool_api.set_cached_route_context("anonymous", "5551237777", context)
+    assert pool_api.get_cached_route_context("anonymous", "5551237777") is None
+
+    pool_api.set_cached_route_context("266696687", "5551237777", context)
+    assert pool_api.get_cached_route_context("266696687", "5551237777") is None
+
+
 def test_pool_area_code():
     pool_api._reset_pool(AREA_CODE_POOL_ID, preserve=False)
     ctx = {}
