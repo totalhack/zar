@@ -1,4 +1,5 @@
 from functools import reduce
+import ipaddress
 import random
 import time
 from urllib.parse import parse_qs, urlparse, quote, unquote
@@ -42,14 +43,69 @@ def print_request(headers, body):
     pp(body)
 
 
+def _parse_forwarded_ip(value):
+    if not value:
+        return None
+
+    token = value.strip().strip('"')
+    if not token:
+        return None
+
+    if token.lower().startswith("for="):
+        token = token.split("=", 1)[1].strip()
+
+    token = token.split(";", 1)[0].strip().strip('"')
+    if token.lower() == "unknown":
+        return None
+
+    if token.startswith("[") and "]" in token:
+        token = token[1 : token.index("]")]
+    elif token.count(":") == 1 and "." in token:
+        token = token.rsplit(":", 1)[0]
+
+    token = token.split("%", 1)[0]
+
+    try:
+        return ipaddress.ip_address(token)
+    except ValueError:
+        return None
+
+
+def extract_client_ip(headers):
+    candidates = []
+
+    x_forwarded_for = headers.get("x-forwarded-for", None)
+    if x_forwarded_for:
+        candidates.extend(x_forwarded_for.split(","))
+
+    x_real_ip = headers.get("x-real-ip", None)
+    if x_real_ip:
+        candidates.append(x_real_ip)
+
+    forwarded = headers.get("forwarded", None)
+    if forwarded:
+        for forwarded_part in forwarded.split(","):
+            for forwarded_value in forwarded_part.split(";"):
+                if forwarded_value.strip().lower().startswith("for="):
+                    candidates.append(forwarded_value)
+
+    parsed_ips = []
+    for candidate in candidates:
+        parsed_ip = _parse_forwarded_ip(candidate)
+        if parsed_ip:
+            parsed_ips.append(parsed_ip)
+
+    for parsed_ip in parsed_ips:
+        if parsed_ip.is_global:
+            return str(parsed_ip)
+
+    return str(parsed_ips[0]) if parsed_ips else None
+
+
 def extract_header_params(headers):
     host = headers.get("x-forwarded-host", None) or headers.get("host", None)
     origin = headers.get("origin", None)
-    ip = (
-        headers.get("x-forwarded-for", None)
-        or headers.get("x-real-ip", None)
-        or headers.get("forwarded", None)
-    )
+    ip = extract_client_ip(headers)
     user_agent = headers.get("user-agent", None)
     referer = headers.get("referer", None)
     return dict(host=host, origin=origin, ip=ip, user_agent=user_agent, referer=referer)

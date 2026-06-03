@@ -29,7 +29,12 @@ from app.schemas.zar import (
 )
 from app.api import deps
 from app.core.config import settings
-from app.geo import zip_to_area_code_distance, CRITERIA_AREA_CODES
+from app.db.session import database
+from app.geo import (
+    CRITERIA_AREA_CODES,
+    geoip_area_codes_from_ip,
+    zip_to_area_code_distance,
+)
 from app.number_pool import (
     NumberPoolAPI,
     NumberPoolResponseStatus,
@@ -61,10 +66,12 @@ SID_COOKIE_NAME = "_zar_sid"
 POOL_COOKIE_MAX_AGE = 7 * DAYS
 POOL_COOKIE_NAME = "_zar_pool"
 DEFAULT_GEO_MODE = "1"
+GEOIP_URL_PARAM = "gip"
+GEO_MODE_URL_PARAM = "gm"
+SID_POOL_TARGETING_KEY = "pool_targeting"
 
 router = APIRouter()
 
-# TODO add config to skip this
 pool_api = None
 if settings.NUMBER_POOL_ENABLED:
     try:
@@ -97,35 +104,29 @@ def get_pool_context(vid, sid, sid_original_referer, context, headers):
     return res
 
 
-def get_area_codes_from_context(context):
+def get_targeting_from_context(context, allow_geoip=True):
     """
     Among other things, context should have a "url" attribute within its
     latest_context. Example:
 
         {
-        'latest_context': {'url': 'http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=9002212'},
+          'latest_context': {'url': 'http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=9002212'},
         }
     """
-    if not settings.CRITERIA_AREA_CODES_PATH:
-        rb_error("get_area_code_from_context: criteria area codes not loaded")
-        return None
-
-    if not CRITERIA_AREA_CODES:
-        rb_error("get_area_code_from_context: criteria area codes empty")
-        return None
-
     loc_physical_param = settings.LOC_PHYSICAL_URL_PARAM or "loc_physical_ms"
     loc_interest_param = settings.LOC_INTEREST_URL_PARAM or "loc_interest_ms"
 
-    url = context["latest_context"].get("url", None)
+    latest_context = context.get("latest_context", {}) or {}
+    url = latest_context.get("url", None)
     if not url:
         return None
 
     parsed = urlparse(url)
     qs = parse_qs(parsed.query)
-
     loc_physical = qs.get(loc_physical_param, None)
     loc_interest = qs.get(loc_interest_param, None)
+    geoip_mode = qs.get(GEOIP_URL_PARAM, None)
+    geoip_enabled = bool(geoip_mode and geoip_mode[0] == "1")
 
     source_prefix = ""
     if settings.SESSION_SOURCE_PARAM and settings.BING_SOURCE_IDS:
@@ -136,6 +137,29 @@ def get_area_codes_from_context(context):
                 source_prefix = "bing-"
 
     if not loc_physical and not loc_interest:
+        if not geoip_enabled:
+            return None
+        if not allow_geoip:
+            return None
+        if settings.SESSION_SOURCE_PARAM and not qs.get(
+            settings.SESSION_SOURCE_PARAM, None
+        ):
+            # When a session source param is specified, we require it for geoip lookups to happen.
+            # This is a more conservative approach that avoids calling the service for irrelevant
+            # traffic. The user's area code number will get cached on the front end so if they
+            # revisit with no param they will still potentially get their number back.
+            return None
+        area_codes = get_geoip_area_codes_from_context(context)
+        if not area_codes:
+            return None
+        return dict(area_codes=area_codes, source="geoip")
+
+    if not settings.CRITERIA_AREA_CODES_PATH:
+        rb_error("get_area_code_from_context: criteria area codes not loaded")
+        return None
+
+    if not CRITERIA_AREA_CODES:
+        rb_error("get_area_code_from_context: criteria area codes empty")
         return None
 
     if loc_physical:
@@ -145,13 +169,17 @@ def get_area_codes_from_context(context):
 
     if loc_physical and not loc_interest:
         area_codes = CRITERIA_AREA_CODES.get(loc_physical, {}).get("area_codes", None)
-        return area_codes or None
+        if not area_codes:
+            return None
+        return dict(area_codes=area_codes, source="criteria")
 
     if not loc_physical and loc_interest:
         area_codes = CRITERIA_AREA_CODES.get(loc_interest, {}).get("area_codes", None)
-        return area_codes or None
+        if not area_codes:
+            return None
+        return dict(area_codes=area_codes, source="criteria")
 
-    geo_mode = qs.get("gm", None)
+    geo_mode = qs.get(GEO_MODE_URL_PARAM, None)
     if geo_mode:
         geo_mode = geo_mode[0]
     else:
@@ -171,23 +199,138 @@ def get_area_codes_from_context(context):
         if geo_mode == "1":
             # If both dont have state info, use physical area code
             if not (physical_state and interest_state):
-                return physical_area_codes
+                area_codes = physical_area_codes
 
             # If states are different, favor physical area code
-            if physical_state != interest_state:
-                return physical_area_codes
+            elif physical_state != interest_state:
+                area_codes = physical_area_codes
             else:
-                return interest_area_codes or physical_area_codes
+                area_codes = interest_area_codes or physical_area_codes
         elif geo_mode == "2":
             # Always use physical
-            return physical_area_codes
+            area_codes = physical_area_codes
         elif geo_mode == "3":
             # Always use interest
-            return interest_area_codes
+            area_codes = interest_area_codes
         else:
             rb_warning(f"unknown geo_mode {geo_mode}, url: {url}")
+            return None
+
+        if not area_codes:
+            return None
+        return dict(area_codes=area_codes, source="criteria")
 
     return None
+
+
+def get_area_codes_from_context(context):
+    targeting = get_targeting_from_context(context)
+    if not targeting:
+        return None
+    return targeting.get("area_codes", None)
+
+
+def get_geoip_area_codes_from_context(context):
+    area_codes = geoip_area_codes_from_ip(context.get("ip", None))
+    if not area_codes:
+        return None
+
+    latest_context = context.get("latest_context", None)
+    if isinstance(latest_context, dict):
+        latest_context["area_code_source"] = "geoip"
+
+    return area_codes
+
+
+def get_sid_pool_targeting(pool_api, pool_id, sid):
+    if not pool_api or not sid:
+        return None
+
+    sid_ctx = pool_api.get_user_context("sid", sid) or {}
+    pool_targeting = sid_ctx.get(SID_POOL_TARGETING_KEY, {}) or {}
+    if not isinstance(pool_targeting, dict):
+        return None
+
+    targeting = pool_targeting.get(str(pool_id), None)
+    if not isinstance(targeting, dict):
+        return None
+
+    area_codes = targeting.get("area_codes", None)
+    if not area_codes:
+        return None
+
+    return dict(
+        area_codes=area_codes,
+        source=targeting.get("source", None),
+        updated_at=targeting.get("updated_at", None),
+    )
+
+
+def set_sid_pool_targeting(pool_api, pool_id, sid, target_area_codes, source):
+    if not pool_api or not sid or not source:
+        return
+
+    if not target_area_codes:
+        return
+
+    sid_ctx = pool_api.get_user_context("sid", sid) or {}
+    pool_targeting = sid_ctx.get(SID_POOL_TARGETING_KEY, {}) or {}
+    if not isinstance(pool_targeting, dict):
+        pool_targeting = {}
+
+    pool_targeting[str(pool_id)] = dict(
+        area_codes=target_area_codes,
+        source=source,
+        updated_at=int(time.time()),
+    )
+    sid_ctx[SID_POOL_TARGETING_KEY] = pool_targeting
+    pool_api.set_user_context("sid", sid, sid_ctx)
+
+
+def get_area_code_from_number(number):
+    if number is None:
+        return None
+
+    digits = "".join(ch for ch in str(number) if ch.isdigit())
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+
+    if len(digits) != 10:
+        return None
+
+    return digits[:3]
+
+
+def get_target_area_codes(pool_api, pool_id, context, number=None):
+    context_targeting = get_targeting_from_context(context, allow_geoip=False)
+    sid_targeting = None
+    geoip_targeting = None
+
+    if not context_targeting:
+        sid_targeting = get_sid_pool_targeting(pool_api, pool_id, context.get("sid"))
+        if sid_targeting:
+            latest_context = context.get("latest_context", None)
+            if isinstance(latest_context, dict):
+                latest_context["area_code_source"] = "sid_cache"
+
+    if not context_targeting and not sid_targeting:
+        geoip_targeting = get_targeting_from_context(context, allow_geoip=True)
+        if geoip_targeting and geoip_targeting.get("source") != "geoip":
+            geoip_targeting = None
+
+    base_targeting = context_targeting or sid_targeting or geoip_targeting or {}
+    target_area_codes = list(base_targeting.get("area_codes", []) or [])
+    requested_number_area_code = get_area_code_from_number(number)
+
+    if requested_number_area_code:
+        target_area_codes = [requested_number_area_code] + [
+            area_code
+            for area_code in target_area_codes
+            if area_code != requested_number_area_code
+        ]
+
+    sid_targeting_to_cache = context_targeting or geoip_targeting
+    return (target_area_codes or None), sid_targeting_to_cache
 
 
 def get_pool_number(pool_api, pool_id, context, number=None, request=None):
@@ -202,18 +345,29 @@ def get_pool_number(pool_api, pool_id, context, number=None, request=None):
         return res
 
     target_area_codes = None
-    if (not number) and pool_api.is_area_code_pool(pool_id):
-        target_area_codes = get_area_codes_from_context(context)
+    sid_targeting_to_cache = None
+    if pool_api.is_area_code_pool(pool_id):
+        target_area_codes, sid_targeting_to_cache = get_target_area_codes(
+            pool_api, pool_id, context, number=number
+        )
 
     try:
-        res = pool_api.lease_number(
+        number_res = pool_api.lease_number(
             pool_id,
             context,
             target_number=number,
             target_area_codes=target_area_codes,
             renew=True if number else False,
         )
-        res = dict(status=NumberPoolResponseStatus.SUCCESS, number=res, msg=None)
+        if sid_targeting_to_cache:
+            set_sid_pool_targeting(
+                pool_api,
+                pool_id,
+                context.get("sid", None),
+                sid_targeting_to_cache.get("area_codes", None),
+                sid_targeting_to_cache.get("source", None),
+            )
+        res = dict(status=NumberPoolResponseStatus.SUCCESS, number=number_res, msg=None)
     except NumberPoolEmpty as e:
         res = dict(
             status=NumberPoolResponseStatus.ERROR,
@@ -341,7 +495,6 @@ async def page(
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
     _zar_pool: Optional[str] = Cookie(None),
-    conn=Depends(deps.get_conn),
 ) -> Dict[str, Any]:
     start = time.time()
     body = dict(body)
@@ -376,10 +529,12 @@ async def page(
         pool_data = handle_pool_request(
             zar, body["properties"], _zar_pool, headers, request, response
         )
-        if pool_data:
+        if pool_data and pool_api:
             sid_ctx = pool_api.get_user_context("sid", sid)
             if sid_ctx:
                 pool_data["sid_ctx"] = sid_ctx
+            body["properties"]["pool_data"] = pool_data
+        elif pool_data:
             body["properties"]["pool_data"] = pool_data
     except Exception as e:
         rb_error(f"handle_pool_request failed: {str(e)}", request=request)
@@ -395,7 +550,8 @@ async def page(
         referer=headers["referer"],
         properties=json.dumps(body["properties"]),
     )
-    pk = await conn.execute(query=stmt)
+    async with database.connection() as conn:
+        pk = await conn.execute(query=stmt)
 
     response.set_cookie(
         **zar_cookie_params(
@@ -422,7 +578,6 @@ async def track(
     request: Request,
     _zar_sid: Optional[str] = Cookie(None),
     _zar_cid: Optional[str] = Cookie(None),
-    conn=Depends(deps.get_conn),
     body_data: dict = Depends(deps.get_body_data),
 ):
     start = time.time()
@@ -471,7 +626,8 @@ async def track(
         referer=headers["referer"],
         properties=json.dumps(body["properties"]),
     )
-    pk = await conn.execute(query=stmt)
+    async with database.connection() as conn:
+        pk = await conn.execute(query=stmt)
 
     dbg(f"took: {time.time() - start:0.3f}s")
     if text_response:
@@ -584,9 +740,10 @@ def number_pool(
         max_age = body["properties"].get("pool_max_age", POOL_COOKIE_MAX_AGE)
         set_pool_cookie(response, pool_sesh, headers, max_age=max_age)
 
-    sid_ctx = pool_api.get_user_context("sid", sid)
-    if sid_ctx:
-        res["sid_ctx"] = sid_ctx
+    if pool_api:
+        sid_ctx = pool_api.get_user_context("sid", sid)
+        if sid_ctx:
+            res["sid_ctx"] = sid_ctx
 
     info(f"took: {time.time() - start:0.3f}s, {res}")
     return res

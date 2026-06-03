@@ -6,6 +6,7 @@ from urllib.parse import quote
 from fastapi.testclient import TestClient
 from tlbx import st, pp
 
+from app.api.api_v2.endpoints import zar as zar_endpoints
 from app.core.config import settings
 from app.number_pool import NumberPoolResponseStatus
 
@@ -95,6 +96,26 @@ def remove_user_context(client, id_type, user_id):
         params=dict(key="abc", user_id=user_id, id_type=id_type),
     )
     assert resp.status_code == 200, resp.text
+
+
+def clear_cached_route_context(call_from, call_to):
+    if not zar_endpoints.pool_api:
+        return
+    key = zar_endpoints.pool_api.get_cached_route_key(call_from, call_to)
+    zar_endpoints.pool_api.conn.delete(key)
+
+
+def clear_sid_user_context(user_id):
+    if not zar_endpoints.pool_api:
+        return
+    zar_endpoints.pool_api.remove_user_context("sid", user_id)
+
+
+def clear_sid_pool_number_mapping(pool_id, sid):
+    if not zar_endpoints.pool_api:
+        return
+    key = zar_endpoints.pool_api._get_session_number_hash_name(pool_id)
+    zar_endpoints.pool_api.conn.hdel(key, sid)
 
 
 def test_endpoint_page_v2(client: TestClient):
@@ -304,6 +325,40 @@ def test_endpoint_track_v2(client: TestClient) -> None:
     assert data.get("id", None)
 
 
+class FailOnEnterConnection:
+    async def __aenter__(self):
+        raise AssertionError("database connection should not be opened")
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+def test_endpoint_page_bot_skips_db_connection(client: TestClient, monkeypatch) -> None:
+    req = copy.deepcopy(SAMPLE_PAGE_REQUEST)
+    req["properties"]["is_bot"] = True
+    monkeypatch.setattr(
+        zar_endpoints.database, "connection", lambda: FailOnEnterConnection()
+    )
+
+    resp = client.post(f"{settings.API_V2_STR}/page", json=req)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {}
+
+
+def test_endpoint_track_bot_skips_db_connection(
+    client: TestClient, monkeypatch
+) -> None:
+    req = copy.deepcopy(SAMPLE_TRACK_REQUEST)
+    req["properties"]["is_bot"] = True
+    monkeypatch.setattr(
+        zar_endpoints.database, "connection", lambda: FailOnEnterConnection()
+    )
+
+    resp = client.post(f"{settings.API_V2_STR}/track", json=req)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {}
+
+
 SAMPLE_NUMBER_POOL_REQUEST = {
     "pool_id": 1,
     "number": None,
@@ -357,6 +412,87 @@ def test_endpoint_number_pool_init(client: TestClient) -> None:
     assert data.get("status", None) == NumberPoolResponseStatus.SUCCESS
 
 
+def test_endpoint_number_pool_rerequest_taken_number_reuses_number_area_code(
+    client: TestClient,
+) -> None:
+    reset_pool(client, pool_id=AREA_CODE_POOL_ID)
+    client.cookies.clear()
+
+    targeted_url = (
+        "http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=9002212"
+    )
+    _, first_data = page_with_pool(client, pool_id=AREA_CODE_POOL_ID, url=targeted_url)
+    leased_number = first_data["pool_data"]["number"]
+    assert leased_number.startswith("401")
+
+    client.cookies.clear()
+    page(client)
+
+    renew_req = copy.deepcopy(SAMPLE_NUMBER_POOL_REQUEST)
+    renew_req["pool_id"] = AREA_CODE_POOL_ID
+    renew_req["number"] = leased_number
+    renew_req["context"] = {}
+
+    resp = client.post(f"{settings.API_V2_STR}/number_pool", json=renew_req)
+    assert resp.status_code == 200, resp.text
+    renew_data = resp.json()
+    pp(renew_data)
+
+    assert renew_data.get("status", None) == NumberPoolResponseStatus.SUCCESS
+    assert renew_data["number"] != leased_number
+    assert renew_data["number"].startswith("401")
+
+
+def test_endpoint_page_uses_sid_cached_targeting_without_params(
+    client: TestClient,
+) -> None:
+    reset_pool(client, pool_id=AREA_CODE_POOL_ID)
+    client.cookies.clear()
+
+    targeted_url = (
+        "http://localhost:8080/one?pl=1&loc_interest_ms=&loc_physical_ms=9002212"
+    )
+    first_resp, first_data = page_with_pool(
+        client, pool_id=AREA_CODE_POOL_ID, url=targeted_url
+    )
+    first_number = first_data["pool_data"]["number"]
+    sid = first_data["sid"]
+    sid_ctx = first_data["pool_data"].get("sid_ctx", {})
+    targeting = sid_ctx.get("pool_targeting", {}).get(str(AREA_CODE_POOL_ID), {})
+
+    assert first_number.startswith("401")
+    assert set(targeting.keys()) == {"area_codes", "source", "updated_at"}
+    assert targeting["area_codes"] == ["401"]
+    assert targeting["source"] == "criteria"
+    assert targeting["updated_at"]
+
+    sid_cookie = first_resp.cookies.get("_zar_sid")
+    assert sid_cookie
+
+    clear_sid_pool_number_mapping(AREA_CODE_POOL_ID, sid)
+
+    client.cookies.clear()
+    client.cookies.set("_zar_sid", sid_cookie)
+
+    revisit_resp, revisit_data = page_with_pool(
+        client, pool_id=AREA_CODE_POOL_ID, url="http://localhost:8080/one?pl=1"
+    )
+    second_number = revisit_data["pool_data"]["number"]
+    second_sid_ctx = revisit_data["pool_data"].get("sid_ctx", {})
+    second_targeting = second_sid_ctx.get("pool_targeting", {}).get(
+        str(AREA_CODE_POOL_ID), {}
+    )
+
+    assert revisit_resp.status_code == 200
+    assert revisit_data["sid"] == sid
+    assert second_number != first_number
+    assert second_number.startswith("401")
+    assert set(second_targeting.keys()) == {"area_codes", "source", "updated_at"}
+    assert second_targeting["area_codes"] == ["401"]
+    assert second_targeting["source"] == "criteria"
+    assert second_targeting["updated_at"]
+
+
 def test_endpoint_number_pool_no_sid(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
@@ -368,6 +504,23 @@ def test_endpoint_number_pool_no_sid(client: TestClient) -> None:
         data["status"] == NumberPoolResponseStatus.ERROR
         and data["msg"] == "no session ID"
     )
+
+
+def test_endpoint_number_pool_handles_pool_unavailable(
+    client: TestClient, monkeypatch
+) -> None:
+    page(client)
+    monkeypatch.setattr(zar_endpoints, "pool_api", None)
+
+    resp = client.post(
+        f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    pp(data)
+
+    assert data["status"] == NumberPoolResponseStatus.ERROR
+    assert data["msg"] == "pool unavailable"
 
 
 def test_endpoint_number_pool_update(client: TestClient) -> None:
@@ -594,6 +747,12 @@ def test_endpoint_number_pool_renew_returns_sid_ctx(client: TestClient) -> None:
     resp, data = page_with_pool(client)
     assert data.get("pool_data", None) and data["pool_data"].get("number", None)
     number = data["pool_data"]["number"]
+    sid = data["sid"]
+
+    # Clear any stale route or sid context from earlier tests so this verifies
+    # the current session's track_call -> renewal path.
+    clear_cached_route_context(SAMPLE_TRACK_CALL_REQUEST["call_from"], number)
+    clear_sid_user_context(sid)
 
     # Step 2: Call track_call with the leased number
     track_call_req = SAMPLE_TRACK_CALL_REQUEST.copy()

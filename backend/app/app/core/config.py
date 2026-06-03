@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     LOC_INTEREST_URL_PARAM: Union[str, None] = None
     BING_SOURCE_IDS: Union[List[str], None] = None
 
+    MAXMIND_GEOIP_ACCOUNT_ID: Union[int, None] = None
+    MAXMIND_GEOIP_LICENSE_KEY: Union[str, None] = None
+
     @field_validator("BING_SOURCE_IDS", mode="before")
     @classmethod
     def assemble_bing_source_ids(cls, v: Union[str, List[str]]):

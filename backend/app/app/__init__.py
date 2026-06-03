@@ -6,7 +6,7 @@ import uvicorn.protocols.utils
 from app.core.config import settings
 from app.core.logging import default_logger, dbg, info, warn, error
 from app.db.session import database
-from app.geo import init_criteria_area_codes
+from app.geo import close_maxmind_geoip, init_criteria_area_codes, init_maxmind_geoip
 from app.utils import extract_header_params
 
 
@@ -38,10 +38,14 @@ async def lifespan(app):
     await database.connect()
     if settings.CRITERIA_AREA_CODES_PATH:
         init_criteria_area_codes()
+    if settings.MAXMIND_GEOIP_ACCOUNT_ID and settings.MAXMIND_GEOIP_LICENSE_KEY:
+        init_maxmind_geoip()
+
     print("FastAPI app started with async database connection")
     try:
         yield  # Hand control to the app
     finally:
+        close_maxmind_geoip()
         await database.disconnect()
 
 

@@ -1,12 +1,70 @@
 import csv
+import ipaddress
+import json
 import math
+from threading import Lock
 
+import geoip2.errors
+import geoip2.webservice
 import pgeocode
-from tlbx import info, warn, error
+from tlbx import info, warn, error, st
 
 from app.core.config import settings
+from app.number_pool import get_number_pool_conn
 
 nomi = pgeocode.Nominatim("us")
+
+MAXMIND_GEOIP_HOST = "geoip.maxmind.com"
+MAXMIND_GEOIP_TIMEOUT = 2.0
+MAXMIND_GEOIP_CACHE_TTL_SECONDS = 24 * 60 * 60
+MAXMIND_GEOIP_AREA_CODE_NEAR_LIMIT = 1
+MAXMIND_GEOIP_AREA_CODE_FAR_LIMIT = 3
+MAXMIND_GEOIP_CLOSEST_AREA_CODE_DISTANCE_THRESHOLD_MILES = 50
+MAXMIND_GEOIP_CACHE_KEY_PREFIX = "geoip:area_codes"
+
+SUPPORTED_MAXMIND_COUNTRY_CODES = {
+    # "CA", # Canada
+    # "PR", # Puerto Rico
+    "US",
+}
+
+_MAXMIND_GEOIP_CACHE_MISS = object()
+_MAXMIND_GEOIP_CLIENT = None
+_MAXMIND_GEOIP_CLIENT_LOCK = Lock()
+
+
+def init_maxmind_geoip():
+    client = get_maxmind_geoip_client()
+    if client:
+        info(f"Initialized MaxMind GeoIP client for {MAXMIND_GEOIP_HOST}")
+    return client
+
+
+def close_maxmind_geoip():
+    global _MAXMIND_GEOIP_CLIENT
+
+    with _MAXMIND_GEOIP_CLIENT_LOCK:
+        if _MAXMIND_GEOIP_CLIENT:
+            _MAXMIND_GEOIP_CLIENT.close()
+            _MAXMIND_GEOIP_CLIENT = None
+
+
+def get_maxmind_geoip_client():
+    global _MAXMIND_GEOIP_CLIENT
+
+    if not (settings.MAXMIND_GEOIP_ACCOUNT_ID and settings.MAXMIND_GEOIP_LICENSE_KEY):
+        return None
+
+    with _MAXMIND_GEOIP_CLIENT_LOCK:
+        if not _MAXMIND_GEOIP_CLIENT:
+            _MAXMIND_GEOIP_CLIENT = geoip2.webservice.Client(
+                settings.MAXMIND_GEOIP_ACCOUNT_ID,
+                settings.MAXMIND_GEOIP_LICENSE_KEY,
+                host=MAXMIND_GEOIP_HOST,
+                timeout=MAXMIND_GEOIP_TIMEOUT,
+            )
+        return _MAXMIND_GEOIP_CLIENT
+
 
 AREA_CODES = {
     "201": {
@@ -2390,6 +2448,157 @@ def zip_to_area_code_distance(zip_code, area_code):
     dist = haversine_distance(zip_lat_lon, area_code_lat_lon)
     rounded = round(dist, 1)
     return rounded if math.isfinite(rounded) else None
+
+
+def _get_cached_maxmind_geoip_lookup(ip):
+    ttl_seconds = MAXMIND_GEOIP_CACHE_TTL_SECONDS
+    if ttl_seconds <= 0:
+        return _MAXMIND_GEOIP_CACHE_MISS
+
+    try:
+        conn = get_number_pool_conn()
+        if not conn:
+            return _MAXMIND_GEOIP_CACHE_MISS
+
+        cache_value = conn.get(f"{MAXMIND_GEOIP_CACHE_KEY_PREFIX}:{ip}")
+        if cache_value is None:
+            return _MAXMIND_GEOIP_CACHE_MISS
+
+        return json.loads(cache_value)
+    except Exception as e:
+        warn(f"Could not read MaxMind GeoIP cache for {ip}: {str(e)}")
+        return _MAXMIND_GEOIP_CACHE_MISS
+
+
+def _set_cached_maxmind_geoip_lookup(ip, area_codes):
+    ttl_seconds = MAXMIND_GEOIP_CACHE_TTL_SECONDS
+    if ttl_seconds <= 0:
+        return
+
+    try:
+        conn = get_number_pool_conn()
+        if not conn:
+            return
+
+        conn.setex(
+            f"{MAXMIND_GEOIP_CACHE_KEY_PREFIX}:{ip}",
+            ttl_seconds,
+            json.dumps(area_codes or []),
+        )
+    except Exception as e:
+        warn(f"Could not write MaxMind GeoIP cache for {ip}: {str(e)}")
+
+
+def _get_area_code_region_code(area_code_info):
+    metro_area = area_code_info.get("Metro Area", "")
+    if "," not in metro_area:
+        return None
+
+    region_code = metro_area.rsplit(",", 1)[1].strip().upper()
+    return region_code or None
+
+
+def _rank_area_codes_for_geoip_location(
+    country_iso_code, subdivision_iso_code, lat, lon
+):
+    if country_iso_code and country_iso_code not in SUPPORTED_MAXMIND_COUNTRY_CODES:
+        return None
+
+    matching_region_codes = {
+        region_code
+        for region_code in [country_iso_code, subdivision_iso_code]
+        if region_code
+    }
+
+    candidates = []
+    has_coordinates = lat is not None and lon is not None
+
+    for area_code, area_code_info in AREA_CODES.items():
+        try:
+            area_lat = float(area_code_info["Latitude"])
+            area_lon = float(area_code_info["Longitude"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        region_code = _get_area_code_region_code(area_code_info)
+        region_match = region_code in matching_region_codes if region_code else False
+        if not has_coordinates and not region_match:
+            continue
+
+        if has_coordinates:
+            distance = haversine_distance((lat, lon), (area_lat, area_lon))
+        else:
+            distance = math.inf
+
+        population = int(area_code_info.get("Population", 0) or 0)
+        candidates.append((0 if region_match else 1, distance, -population, area_code))
+
+    if not candidates:
+        return None
+
+    candidates.sort()
+    limit = max(int(MAXMIND_GEOIP_AREA_CODE_FAR_LIMIT or 1), 1)
+    if has_coordinates and candidates[0][1] < (
+        MAXMIND_GEOIP_CLOSEST_AREA_CODE_DISTANCE_THRESHOLD_MILES
+    ):
+        limit = max(int(MAXMIND_GEOIP_AREA_CODE_NEAR_LIMIT or 1), 1)
+
+    return [candidate[3] for candidate in candidates[:limit]] or None
+
+
+def geoip_area_codes_from_ip(ip):
+    if not ip:
+        return None
+
+    try:
+        parsed_ip = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+
+    if not parsed_ip.is_global:
+        return None
+
+    cached = _get_cached_maxmind_geoip_lookup(ip)
+    if cached is not _MAXMIND_GEOIP_CACHE_MISS:
+        return cached
+
+    client = get_maxmind_geoip_client()
+    if not client:
+        return None
+
+    try:
+        response = client.city(ip)
+    except geoip2.errors.AddressNotFoundError:
+        info(f"MaxMind GeoIP address not found for {ip}")
+        _set_cached_maxmind_geoip_lookup(ip, None)
+        return None
+    except (
+        geoip2.errors.AuthenticationError,
+        geoip2.errors.HTTPError,
+        geoip2.errors.InvalidRequestError,
+        geoip2.errors.OutOfQueriesError,
+        geoip2.errors.PermissionRequiredError,
+        geoip2.errors.GeoIP2Error,
+    ) as e:
+        warn(f"MaxMind GeoIP lookup failed for {ip}: {str(e)}")
+        return None
+
+    country_iso_code = (response.country.iso_code or "").upper() or None
+    subdivision_iso_code = response.subdivisions.most_specific.iso_code
+    subdivision_iso_code = (
+        subdivision_iso_code.upper() if subdivision_iso_code else None
+    )
+    lat = response.location.latitude
+    lon = response.location.longitude
+
+    area_codes = _rank_area_codes_for_geoip_location(
+        country_iso_code,
+        subdivision_iso_code,
+        lat,
+        lon,
+    )
+    _set_cached_maxmind_geoip_lookup(ip, area_codes)
+    return area_codes
 
 
 CRITERIA_AREA_CODES = {}
