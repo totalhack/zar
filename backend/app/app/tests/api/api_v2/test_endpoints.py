@@ -493,6 +493,73 @@ def test_endpoint_page_uses_sid_cached_targeting_without_params(
     assert second_targeting["updated_at"]
 
 
+def test_endpoint_page_uses_sid_cached_geoip_targeting_with_gip_zero(
+    client: TestClient, monkeypatch
+) -> None:
+    reset_pool(client, pool_id=AREA_CODE_POOL_ID)
+    client.cookies.clear()
+
+    monkeypatch.setattr(settings, "SESSION_SOURCE_PARAM", None)
+
+    calls = {"count": 0}
+
+    def fake_geoip_area_codes_from_ip(ip):
+        calls["count"] += 1
+        return ["401"]
+
+    monkeypatch.setattr(
+        zar_endpoints,
+        "geoip_area_codes_from_ip",
+        fake_geoip_area_codes_from_ip,
+    )
+
+    first_resp, first_data = page_with_pool(
+        client,
+        pool_id=AREA_CODE_POOL_ID,
+        url="http://localhost:8080/one?pl=1&gip=1",
+    )
+    first_number = first_data["pool_data"]["number"]
+    sid = first_data["sid"]
+    sid_ctx = first_data["pool_data"].get("sid_ctx", {})
+    targeting = sid_ctx.get("pool_targeting", {}).get(str(AREA_CODE_POOL_ID), {})
+
+    assert first_number.startswith("401")
+    assert set(targeting.keys()) == {"area_codes", "source", "updated_at"}
+    assert targeting["area_codes"] == ["401"]
+    assert targeting["source"] == "geoip"
+    assert targeting["updated_at"]
+    assert calls["count"] == 1
+
+    sid_cookie = first_resp.cookies.get("_zar_sid")
+    assert sid_cookie
+
+    clear_sid_pool_number_mapping(AREA_CODE_POOL_ID, sid)
+
+    client.cookies.clear()
+    client.cookies.set("_zar_sid", sid_cookie)
+
+    revisit_resp, revisit_data = page_with_pool(
+        client,
+        pool_id=AREA_CODE_POOL_ID,
+        url="http://localhost:8080/one?pl=1&gip=0",
+    )
+    second_number = revisit_data["pool_data"]["number"]
+    second_sid_ctx = revisit_data["pool_data"].get("sid_ctx", {})
+    second_targeting = second_sid_ctx.get("pool_targeting", {}).get(
+        str(AREA_CODE_POOL_ID), {}
+    )
+
+    assert revisit_resp.status_code == 200
+    assert revisit_data["sid"] == sid
+    assert second_number != first_number
+    assert second_number.startswith("401")
+    assert set(second_targeting.keys()) == {"area_codes", "source", "updated_at"}
+    assert second_targeting["area_codes"] == ["401"]
+    assert second_targeting["source"] == "geoip"
+    assert second_targeting["updated_at"]
+    assert calls["count"] == 1
+
+
 def test_endpoint_number_pool_no_sid(client: TestClient) -> None:
     resp = client.post(
         f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
