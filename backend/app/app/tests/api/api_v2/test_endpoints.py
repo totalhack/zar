@@ -6,9 +6,10 @@ from urllib.parse import quote
 from fastapi.testclient import TestClient
 from tlbx import st, pp
 
+from app import models
 from app.api.api_v2.endpoints import zar as zar_endpoints
 from app.core.config import settings
-from app.number_pool import NumberPoolResponseStatus
+from app.number_pool import NUMBER_POOL_CACHE_EXPIRATION, NumberPoolResponseStatus
 
 
 AREA_CODE_POOL_ID = 3
@@ -739,6 +740,79 @@ def test_endpoint_call_track_success(client: TestClient) -> None:
     remove_user_context(
         client, id_type="phone", user_id=SAMPLE_TRACK_CALL_REQUEST["call_from"]
     )
+
+
+def test_endpoint_call_track_metadata(client: TestClient, db) -> None:
+    reset_pool(client)
+    client.cookies.clear()
+
+    page(client)
+    resp = client.post(
+        f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+    )
+    assert resp.status_code == 200, resp.text
+    number = resp.json()["number"]
+
+    callers = ["4015550101", "4015550102", "4015550103"]
+    for caller in callers:
+        clear_cached_route_context(caller, number)
+
+    requests = [callers[0], callers[0], callers[1]]
+    expected_counts = [1, 1, 2]
+    for index, (caller, expected_count) in enumerate(
+        zip(requests, expected_counts), start=1
+    ):
+        track_call_req = {
+            **SAMPLE_TRACK_CALL_REQUEST,
+            "call_id": f"track-call-metadata-{index}",
+            "call_from": caller,
+            "call_to": number,
+        }
+        resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+        assert resp.status_code == 200, resp.text
+        context = resp.json()["msg"]
+        assert context["distinct_lease_callers"] == expected_count
+        assert context["suspicious_call"] is False
+        assert context["context_expired"] is False
+        assert context["seconds_since_renewal"] >= 0
+
+    number_context = zar_endpoints.pool_api.get_pool_number_context(number)
+    number_context["renewed_at"] = time.time() - NUMBER_POOL_CACHE_EXPIRATION - 5
+    zar_endpoints.pool_api.set_number_context(number, number_context)
+
+    track_call_req = {
+        **SAMPLE_TRACK_CALL_REQUEST,
+        "call_id": "track-call-metadata-suspicious",
+        "call_from": callers[2],
+        "call_to": number,
+        "stir_validation": "TN-Validation-Passed-A",
+    }
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+    assert resp.status_code == 200, resp.text
+    context = resp.json()["msg"]
+    assert context["distinct_lease_callers"] == 3
+    assert context["suspicious_call"] is True
+    assert context["context_expired"] is True
+    assert context["seconds_since_renewal"] >= NUMBER_POOL_CACHE_EXPIRATION
+    assert "stir_validation" not in context
+
+    db.expire_all()
+    track_call = (
+        db.query(models.TrackCall)
+        .filter(models.TrackCall.call_id == track_call_req["call_id"])
+        .order_by(models.TrackCall.id.desc())
+        .first()
+    )
+    assert track_call
+    stored_context = json.loads(track_call.number_context)
+    assert stored_context["distinct_lease_callers"] == 3
+    assert stored_context["suspicious_call"] is True
+    assert stored_context["context_expired"] is True
+    assert stored_context["seconds_since_renewal"] >= NUMBER_POOL_CACHE_EXPIRATION
+    assert stored_context["stir_validation"] == "TN-Validation-Passed-A"
+
+    for caller in callers:
+        clear_cached_route_context(caller, number)
 
 
 SAMPLE_USER_CONTEXT_REQUEST = {

@@ -34,6 +34,7 @@ NUMBER_POOL_MAX_RENEWAL_AGE = 7 * DAYS
 # How long we keep call_from -> call_to route contexts cached
 NUMBER_POOL_ROUTE_CACHE_EXPIRATION = 30 * DAYS
 NUMBER_POOL_USER_CONTEXT_EXPIRATION = 14 * DAYS
+NUMBER_POOL_LEASE_CALLERS_EXPIRATION = 2 * DAYS
 
 LOCK_WAIT_TIMEOUT = 5
 LOCK_HOLD_TIMEOUT = 5
@@ -289,6 +290,15 @@ class NumberPoolAPI:
 
     def get_cached_route_key(self, call_from, call_to):
         return f"{call_from}->{call_to}"
+
+    def track_lease_caller(self, number, context, call_from):
+        key = f"lease_callers:{context['pool_id']}:{number}:{context['leased_at']}"
+        pipeline = self.conn.pipeline()
+        pipeline.sadd(key, call_from)
+        pipeline.expire(key, NUMBER_POOL_LEASE_CALLERS_EXPIRATION)
+        pipeline.scard(key)
+        _, _, distinct_callers = pipeline.execute()
+        return distinct_callers
 
     def _is_ignored_phone_user_id(self, user_id):
         if user_id is None:

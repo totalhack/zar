@@ -69,6 +69,7 @@ DEFAULT_GEO_MODE = "1"
 GEOIP_URL_PARAM = "gip"
 GEO_MODE_URL_PARAM = "gm"
 SID_POOL_TARGETING_KEY = "pool_targeting"
+FLAG_DISTINCT_CALLERS_LIMIT = 3
 
 router = APIRouter()
 
@@ -1083,6 +1084,13 @@ async def track_call(
     pool_api.set_cached_route_context(call_from, call_to, ctx)
 
     ctx["has_cached_route"] = has_cached_route
+    seconds_since_renewal = pool_api._number_context_age(ctx)
+    distinct_callers = pool_api.track_lease_caller(call_to, ctx, call_from)
+    ctx["distinct_lease_callers"] = distinct_callers
+    ctx["suspicious_call"] = distinct_callers >= FLAG_DISTINCT_CALLERS_LIMIT
+    ctx["context_expired"] = pool_api._number_context_expired(ctx)
+    ctx["seconds_since_renewal"] = seconds_since_renewal
+    ctx["stir_validation"] = body.get("stir_validation")
     ctx_json = json.dumps(ctx)
 
     insert_stmt = insert(models.TrackCall).values(
@@ -1103,7 +1111,9 @@ async def track_call(
             msg=NumberPoolResponseMessages.INTERNAL_ERROR,
         )
 
-    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
+    response_ctx = ctx.copy()
+    response_ctx.pop("stir_validation", None)
+    return dict(status=NumberPoolResponseStatus.SUCCESS, msg=response_ctx)
 
 
 @router.get("/refresh_number_pool_conn", response_model=Dict[str, Any])

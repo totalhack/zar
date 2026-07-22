@@ -34,6 +34,7 @@ class TrackCallRequestBody(BaseModel):
     call_id: str
     call_from: str
     call_to: str
+    stir_validation: Union[str, None] = Field(default=None)
 
 
 class UpdateUserContextRequestBody(BaseModel):
