@@ -4,10 +4,12 @@ import pytest
 from tlbx import st, pp
 
 from app.number_pool import (
+    NUMBER_POOL_CACHE_EXPIRATION,
     NumberPoolAPI,
     NumberMaxRenewalExceeded,
     NumberPoolEmpty,
     NumberNotFound,
+    NumberStatus,
 )
 
 
@@ -77,6 +79,24 @@ def test_pool_take_expired_number():
     assert num == new_num  # Should take the oldest expired number
     ctx = pool_api.get_pool_number_context(num)
     assert "foo" in ctx.get("request_context", None)
+
+
+def test_pool_cache_expiration_override(monkeypatch):
+    pool_api._reset_pool(DEFAULT_POOL_ID, preserve=False)
+    num = pool_api.lease_number(DEFAULT_POOL_ID, {})
+    ctx = pool_api.get_pool_number_context(num)
+    ctx["renewed_at"] = time.time() - NUMBER_POOL_CACHE_EXPIRATION - 1
+    pool_api.set_number_context(num, ctx)
+
+    pool_properties = pool_api.get_pool_properties(DEFAULT_POOL_ID).copy()
+    pool_properties["cache_expiration"] = NUMBER_POOL_CACHE_EXPIRATION
+    monkeypatch.setitem(
+        pool_api._pool_properties_cache, DEFAULT_POOL_ID, pool_properties
+    )
+    assert pool_api.get_number_status(num)[0] == NumberStatus.EXPIRED
+
+    pool_properties["cache_expiration"] = 2 * 60 * 60
+    assert pool_api.get_number_status(num)[0] == NumberStatus.TAKEN
 
 
 def test_pool_max_renewal_time():

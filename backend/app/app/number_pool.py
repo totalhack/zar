@@ -29,6 +29,7 @@ NUMBER_POOL_CONNECT_TRIES = 5
 # TODO read these from pool configs
 # If number hasn't been renewed in this time, mark expired (eligible to be taken)
 NUMBER_POOL_CACHE_EXPIRATION = 5 * MINUTES
+NUMBER_POOL_CACHE_EXPIRATION_PROPERTY = "cache_expiration"
 # Numbers can get renewed for this amount of time max
 NUMBER_POOL_MAX_RENEWAL_AGE = 7 * DAYS
 # How long we keep call_from -> call_to route contexts cached
@@ -393,6 +394,25 @@ class NumberPoolAPI:
         pool_props = self.get_pool_properties(pool_id) or {}
         return (pool_props.get("area_code", None) or "").lower() == "all"
 
+    def get_cache_expiration(self, pool_id):
+        pool_props = self.get_pool_properties(pool_id) or {}
+        expiration = pool_props.get(
+            NUMBER_POOL_CACHE_EXPIRATION_PROPERTY, NUMBER_POOL_CACHE_EXPIRATION
+        )
+        try:
+            if isinstance(expiration, bool):
+                raise ValueError
+            expiration = int(expiration)
+            if expiration <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            warn(
+                f"Invalid {NUMBER_POOL_CACHE_EXPIRATION_PROPERTY} for pool "
+                f"{pool_id}: {expiration}, using {NUMBER_POOL_CACHE_EXPIRATION}"
+            )
+            return NUMBER_POOL_CACHE_EXPIRATION
+        return expiration
+
     def lease_number(
         self,
         pool_id,
@@ -634,8 +654,8 @@ class NumberPoolAPI:
         return int(time.time() - renewed_at)
 
     def _number_context_expired(self, context):
-        # TODO support different expirations per pool
-        if self._number_context_age(context) >= NUMBER_POOL_CACHE_EXPIRATION:
+        expiration = self.get_cache_expiration(context["pool_id"])
+        if self._number_context_age(context) >= expiration:
             return True
         return False
 

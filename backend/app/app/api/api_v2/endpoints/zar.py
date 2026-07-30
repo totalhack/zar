@@ -70,6 +70,7 @@ GEOIP_URL_PARAM = "gip"
 GEO_MODE_URL_PARAM = "gm"
 SID_POOL_TARGETING_KEY = "pool_targeting"
 FLAG_DISTINCT_CALLERS_LIMIT = 3
+FLAG_CONTEXT_AGE_LIMIT = 1 * DAYS
 
 router = APIRouter()
 
@@ -999,6 +1000,7 @@ async def track_call(
             return dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
 
     sid = None
+    sid_mismatch = False
     if (not pool_ctx) and route_ctx:
         # No active context found for this tracking number but we have a cached
         # context from this user calling this number before.
@@ -1020,6 +1022,7 @@ async def track_call(
             sid = number_sid
         else:
             # Different session...
+            sid_mismatch = True
             if pool_api.is_same_ip_user_agent(
                 pool_id, pool_ctx["request_context"], route_ctx["request_context"]
             ):
@@ -1081,13 +1084,16 @@ async def track_call(
     if user_ctx:
         ctx["user_context"] = user_ctx
 
+    ctx.setdefault("sid_mismatch", sid_mismatch)
     pool_api.set_cached_route_context(call_from, call_to, ctx)
 
     ctx["has_cached_route"] = has_cached_route
     seconds_since_renewal = pool_api._number_context_age(ctx)
     distinct_callers = pool_api.track_lease_caller(call_to, ctx, call_from)
     ctx["distinct_lease_callers"] = distinct_callers
-    ctx["suspicious_call"] = distinct_callers >= FLAG_DISTINCT_CALLERS_LIMIT
+    ctx["suspicious_call"] = distinct_callers >= FLAG_DISTINCT_CALLERS_LIMIT or (
+        seconds_since_renewal >= FLAG_CONTEXT_AGE_LIMIT and not from_route_cache
+    )
     ctx["context_expired"] = pool_api._number_context_expired(ctx)
     ctx["seconds_since_renewal"] = seconds_since_renewal
     ctx["stir_validation"] = body.get("stir_validation")

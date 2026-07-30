@@ -772,13 +772,28 @@ def test_endpoint_call_track_metadata(client: TestClient, db) -> None:
         assert resp.status_code == 200, resp.text
         context = resp.json()["msg"]
         assert context["distinct_lease_callers"] == expected_count
+        assert context["sid_mismatch"] is False
         assert context["suspicious_call"] is False
         assert context["context_expired"] is False
         assert context["seconds_since_renewal"] >= 0
 
     number_context = zar_endpoints.pool_api.get_pool_number_context(number)
-    number_context["renewed_at"] = time.time() - NUMBER_POOL_CACHE_EXPIRATION - 5
+    number_context["renewed_at"] = time.time() - zar_endpoints.FLAG_CONTEXT_AGE_LIMIT
     zar_endpoints.pool_api.set_number_context(number, number_context)
+
+    stale_track_call_req = {
+        **SAMPLE_TRACK_CALL_REQUEST,
+        "call_id": "track-call-metadata-stale-active",
+        "call_from": callers[0],
+        "call_to": number,
+    }
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=stale_track_call_req)
+    assert resp.status_code == 200, resp.text
+    context = resp.json()["msg"]
+    assert context["distinct_lease_callers"] == 2
+    assert context["sid_mismatch"] is False
+    assert context["suspicious_call"] is True
+    assert context["seconds_since_renewal"] >= zar_endpoints.FLAG_CONTEXT_AGE_LIMIT
 
     track_call_req = {
         **SAMPLE_TRACK_CALL_REQUEST,
@@ -796,7 +811,42 @@ def test_endpoint_call_track_metadata(client: TestClient, db) -> None:
     assert context["seconds_since_renewal"] >= NUMBER_POOL_CACHE_EXPIRATION
     assert "stir_validation" not in context
 
-    db.expire_all()
+    mismatch_caller = "4015550104"
+    route_context = copy.deepcopy(number_context)
+    route_context["leased_at"] = time.time() - zar_endpoints.FLAG_CONTEXT_AGE_LIMIT
+    route_context["request_context"]["sid"] = "mismatched-route-sid"
+    route_context["request_context"]["ip"] = "203.0.113.10"
+    route_context["request_context"]["user_agent"] = "mismatched-route-agent"
+    zar_endpoints.pool_api.set_cached_route_context(
+        mismatch_caller, number, route_context
+    )
+    mismatch_track_call_req = {
+        **SAMPLE_TRACK_CALL_REQUEST,
+        "call_id": "track-call-metadata-sid-mismatch",
+        "call_from": mismatch_caller,
+        "call_to": number,
+    }
+    resp = client.post(
+        f"{settings.API_V2_STR}/track_call", json=mismatch_track_call_req
+    )
+    assert resp.status_code == 200, resp.text
+    context = resp.json()["msg"]
+    assert context["sid_mismatch"] is True
+    assert context["suspicious_call"] is False
+
+    db.rollback()
+    stale_track_call = (
+        db.query(models.TrackCall)
+        .filter(models.TrackCall.call_id == stale_track_call_req["call_id"])
+        .order_by(models.TrackCall.id.desc())
+        .first()
+    )
+    assert stale_track_call
+    assert stale_track_call.from_route_cache is False
+    stale_stored_context = json.loads(stale_track_call.number_context)
+    assert stale_stored_context["suspicious_call"] is True
+    assert stale_stored_context["sid_mismatch"] is False
+
     track_call = (
         db.query(models.TrackCall)
         .filter(models.TrackCall.call_id == track_call_req["call_id"])
@@ -811,7 +861,18 @@ def test_endpoint_call_track_metadata(client: TestClient, db) -> None:
     assert stored_context["seconds_since_renewal"] >= NUMBER_POOL_CACHE_EXPIRATION
     assert stored_context["stir_validation"] == "TN-Validation-Passed-A"
 
-    for caller in callers:
+    mismatch_track_call = (
+        db.query(models.TrackCall)
+        .filter(models.TrackCall.call_id == mismatch_track_call_req["call_id"])
+        .order_by(models.TrackCall.id.desc())
+        .first()
+    )
+    assert mismatch_track_call
+    assert mismatch_track_call.from_route_cache is True
+    mismatch_stored_context = json.loads(mismatch_track_call.number_context)
+    assert mismatch_stored_context["sid_mismatch"] is True
+
+    for caller in callers + [mismatch_caller]:
         clear_cached_route_context(caller, number)
 
 
