@@ -30,6 +30,7 @@ NUMBER_POOL_CONNECT_TRIES = 5
 # If number hasn't been renewed in this time, mark expired (eligible to be taken)
 NUMBER_POOL_CACHE_EXPIRATION = 5 * MINUTES
 NUMBER_POOL_CACHE_EXPIRATION_PROPERTY = "cache_expiration"
+POOL_PROPERTIES_CACHE_EXPIRATION = 2 * MINUTES
 # Numbers can get renewed for this amount of time max
 NUMBER_POOL_MAX_RENEWAL_AGE = 7 * DAYS
 # How long we keep call_from -> call_to route contexts cached
@@ -153,6 +154,7 @@ class NumberPoolAPI:
         # such as in a prestart command for the service.
         self.conn = get_number_pool_conn(tries=conn_tries)
         self._pool_properties_cache = {}
+        self._pool_properties_cache_updated_at = {}
         if not self.conn:
             raise NumberPoolUnavailable("could not connect to pool")
 
@@ -173,13 +175,20 @@ class NumberPoolAPI:
         return f"pool_properties:{pool_id}"
 
     def get_pool_properties(self, pool_id):
-        if pool_id in self._pool_properties_cache:
+        cache_age = time.monotonic() - self._pool_properties_cache_updated_at.get(
+            pool_id, 0
+        )
+        if (
+            pool_id in self._pool_properties_cache
+            and cache_age < POOL_PROPERTIES_CACHE_EXPIRATION
+        ):
             return self._pool_properties_cache[pool_id]
         key = self._get_pool_properties_key(pool_id)
         properties_json = self.conn.get(key)
         if properties_json:
             res = json.loads(properties_json)
             self._pool_properties_cache[pool_id] = res
+            self._pool_properties_cache_updated_at[pool_id] = time.monotonic()
             return res
         msg = f"Pool properties not found for pool {pool_id}"
         rollbar.report_message(dict(msg=msg), "warning")
@@ -192,6 +201,7 @@ class NumberPoolAPI:
         properties = json.loads(properties_str)  # Validate JSON
         self.conn.set(key, json.dumps(properties))
         self._pool_properties_cache[pool_id] = properties
+        self._pool_properties_cache_updated_at[pool_id] = time.monotonic()
         dbg(f"Stored properties for pool {pool_id}")
 
     def reset_pool_properties(self):
@@ -201,6 +211,7 @@ class NumberPoolAPI:
         count = 0
         errors = 0
         self._pool_properties_cache = {}
+        self._pool_properties_cache_updated_at = {}
 
         for pool in pools:
             pool_id = pool["id"]
@@ -917,6 +928,7 @@ class NumberPoolAPI:
     def _reset_pools(self, preserve=True):
         pools = self.get_pools_from_db()
         self._pool_properties_cache = {}
+        self._pool_properties_cache_updated_at = {}
         info(f"Resetting {len(pools)} pools")
         for pool in pools:
             self.set_pool_properties(pool["id"], pool)
