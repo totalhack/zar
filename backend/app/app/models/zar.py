@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Boolean, BigInteger, Text, String, DateTime
+from sqlalchemy import Column, Boolean, BigInteger, Integer, Text, String, DateTime
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
@@ -44,6 +44,23 @@ class TrackCall(Base):
     number_context = Column(Text, nullable=True)
     from_route_cache = Column(Boolean, nullable=True, default=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
+
+class CallEnrichment(Base):
+    __tablename__ = "call_enrichment"
+
+    call_id = Column(String(64), primary_key=True)
+    call_from = Column(String(15), nullable=False)
+    call_to = Column(String(15), nullable=False)
+    status = Column(String(32), nullable=False)
+    from_zip = Column(String(10), nullable=True)
+    trusted_zip = Column(String(10), nullable=True)
+    trust_reason = Column(String(64), nullable=True)
+    properties = Column(Text, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    from_cache = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
 class Pools(Base):

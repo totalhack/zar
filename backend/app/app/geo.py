@@ -2450,6 +2450,16 @@ def zip_to_area_code_distance(zip_code, area_code):
     return rounded if math.isfinite(rounded) else None
 
 
+def zip_to_zip_distance(zip_code1, zip_code2):
+    zip_loc1 = nomi.query_postal_code(zip_code1)
+    zip_loc2 = nomi.query_postal_code(zip_code2)
+    point1 = (float(zip_loc1.latitude), float(zip_loc1.longitude))
+    point2 = (float(zip_loc2.latitude), float(zip_loc2.longitude))
+    dist = haversine_distance(point1, point2)
+    rounded = round(dist, 1)
+    return rounded if math.isfinite(rounded) else None
+
+
 def _get_cached_maxmind_geoip_lookup(ip):
     ttl_seconds = MAXMIND_GEOIP_CACHE_TTL_SECONDS
     if ttl_seconds <= 0:

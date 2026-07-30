@@ -9,7 +9,9 @@ from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import insert
+from sqlalchemy import func, insert
+from sqlalchemy.dialects.mysql import insert as mysql_insert
+from starlette.concurrency import run_in_threadpool
 from starlette.status import HTTP_204_NO_CONTENT
 from tlbx import st, json, dbg, info, warn
 from urllib.parse import urlparse, parse_qs
@@ -45,6 +47,7 @@ from app.number_pool import (
     NumberMaxRenewalExceeded,
     SessionNumberUnavailable,
 )
+from app.trestle import get_trestle_enrichment
 from app.utils import (
     print_request,
     extract_header_params,
@@ -939,6 +942,101 @@ def set_static_number_contexts(
     return dict(status=NumberPoolResponseStatus.SUCCESS, msg=None)
 
 
+async def save_call_enrichment(conn, call_id, call_from, call_to, from_zip, enrichment):
+    trestle_data = enrichment.get("data")
+    values = dict(
+        call_id=call_id,
+        call_from=call_from,
+        call_to=call_to,
+        status=enrichment["status"],
+        from_zip=from_zip,
+        trusted_zip=enrichment.get("trusted_zip"),
+        trust_reason=enrichment.get("trust_reason"),
+        properties=(json.dumps({"trestle": trestle_data}) if trestle_data else None),
+        latency_ms=enrichment.get("latency_ms"),
+        from_cache=bool(enrichment.get("from_cache", False)),
+    )
+    stmt = mysql_insert(models.CallEnrichment).values(**values)
+    stmt = stmt.on_duplicate_key_update(
+        call_from=values["call_from"],
+        call_to=values["call_to"],
+        status=values["status"],
+        from_zip=values["from_zip"],
+        trusted_zip=values["trusted_zip"],
+        trust_reason=values["trust_reason"],
+        properties=values["properties"],
+        latency_ms=values["latency_ms"],
+        from_cache=values["from_cache"],
+        updated_at=func.now(),
+    )
+    try:
+        await conn.execute(query=stmt)
+    except Exception as e:
+        warn(f"Failed to save call enrichment for {call_id}: {str(e)}")
+
+
+async def add_trestle_enrichment(
+    user_ctx,
+    ctx,
+    call_id,
+    call_from,
+    call_to,
+    from_zip,
+    user_area_code,
+    cache_conn,
+    conn,
+):
+    if not settings.TRESTLE_API_KEY:
+        return user_ctx
+
+    existing_user_ctx = user_ctx or (ctx or {}).get("user_context", {})
+    user_zip = None
+    if existing_user_ctx and settings.USER_CONTEXT_ZIP_KEY:
+        user_zip = rgetkey(existing_user_ctx, settings.USER_CONTEXT_ZIP_KEY, None)
+
+    latest_ctx = (ctx or {}).get("request_context", {}).get("latest_context", {})
+    pool_zip = None
+    if latest_ctx and settings.POOL_CONTEXT_ZIP_KEY:
+        pool_zip = rgetkey(latest_ctx, settings.POOL_CONTEXT_ZIP_KEY, None)
+
+    if user_zip or pool_zip:
+        return user_ctx
+
+    try:
+        enrichment = await run_in_threadpool(
+            get_trestle_enrichment,
+            call_from,
+            from_zip,
+            user_area_code,
+            settings.TRESTLE_API_KEY,
+            cache_conn,
+        )
+    except Exception as e:
+        warn(f"Trestle caller ZIP enrichment failed for {call_from}: {str(e)}")
+        enrichment = dict(
+            data=None,
+            status="internal_error",
+            trusted_zip=None,
+            trust_reason="not_applicable",
+            latency_ms=None,
+            from_cache=False,
+        )
+
+    await save_call_enrichment(conn, call_id, call_from, call_to, from_zip, enrichment)
+
+    trestle_data = enrichment.get("data")
+    trestle_zip = enrichment.get("trusted_zip")
+    if trestle_data:
+        ctx["trestle"] = trestle_data
+
+    if not (trestle_zip and settings.USER_CONTEXT_TRESTLE_ZIP_KEY):
+        return user_ctx
+
+    user_ctx = dict(user_ctx or {})
+    user_ctx[settings.USER_CONTEXT_TRESTLE_ZIP_KEY] = trestle_zip
+    return user_ctx
+
+
 @router.post("/track_call", response_model=Dict[str, Any])
 async def track_call(
     body: TrackCallRequestBody,
@@ -994,6 +1092,17 @@ async def track_call(
         static_ctx = pool_api.get_static_number_context(call_to)
         if static_ctx:
             ctx = dict(static_context=static_ctx, has_cached_route=has_cached_route)
+            user_ctx = await add_trestle_enrichment(
+                user_ctx,
+                ctx,
+                body["call_id"],
+                call_from,
+                call_to,
+                body.get("from_zip"),
+                user_area_code,
+                pool_api.conn,
+                conn,
+            )
             if user_ctx:
                 ctx["user_context"] = user_ctx
             info(f"{call_from} -> {call_to}: found static number context")
@@ -1041,7 +1150,19 @@ async def track_call(
 
     if not ctx:
         if user_ctx:
-            ctx = dict(user_context=user_ctx, has_cached_route=has_cached_route)
+            ctx = dict(has_cached_route=has_cached_route)
+            user_ctx = await add_trestle_enrichment(
+                user_ctx,
+                ctx,
+                body["call_id"],
+                call_from,
+                call_to,
+                body.get("from_zip"),
+                user_area_code,
+                pool_api.conn,
+                conn,
+            )
+            ctx["user_context"] = user_ctx
             res = dict(status=NumberPoolResponseStatus.SUCCESS, msg=ctx)
             warn(f"{call_from} -> {call_to}: only found user context")
         else:
@@ -1069,6 +1190,18 @@ async def track_call(
                 f"Failed to calculate zip {ctx_zip} to area code {user_area_code} distance: {str(e)}",
                 request=request,
             )
+
+    user_ctx = await add_trestle_enrichment(
+        user_ctx,
+        ctx,
+        body["call_id"],
+        call_from,
+        call_to,
+        body.get("from_zip"),
+        user_area_code,
+        pool_api.conn,
+        conn,
+    )
 
     if sid:
         # We maintain a separate user context by sid that site sessions can use.

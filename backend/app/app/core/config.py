@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     SESSION_SOURCE_PARAM: Union[str, None] = None
     USER_CONTEXT_ZIP_KEY: Union[str, None] = None
     POOL_CONTEXT_ZIP_KEY: Union[str, None] = None
+    TRESTLE_API_KEY: Union[str, None] = None
+    USER_CONTEXT_TRESTLE_ZIP_KEY: Union[str, None] = None
 
     CRITERIA_AREA_CODES_PATH: Union[str, None] = None
     LOC_PHYSICAL_URL_PARAM: Union[str, None] = None

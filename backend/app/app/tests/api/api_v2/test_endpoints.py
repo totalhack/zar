@@ -878,7 +878,7 @@ def test_endpoint_call_track_metadata(client: TestClient, db) -> None:
 
 SAMPLE_USER_CONTEXT_REQUEST = {
     "key": "abc",
-    "user_id": "4015735878",
+    "user_id": "4015550199",
     "id_type": "phone",
     "context": {"foo": "bar", "baz": "bar", "Zip": "02184"},
 }
@@ -939,6 +939,256 @@ def test_endpoint_set_static_number_contexts(client: TestClient) -> None:
     data = resp.json()
     pp(data)
     assert data.get("msg", {}).get("static_context", None)
+
+
+def test_endpoint_track_call_adds_trusted_trestle_zip(
+    client: TestClient, db, monkeypatch
+) -> None:
+    call_from = "4015550198"
+    call_to = "5551237788"
+    clear_cached_route_context(call_from, call_to)
+    zar_endpoints.pool_api.remove_user_context("phone", call_from)
+    zar_endpoints.pool_api.set_static_number_context(call_to, {"test": "trestle"})
+    monkeypatch.setattr(settings, "TRESTLE_API_KEY", "secret")
+    monkeypatch.setattr(settings, "USER_CONTEXT_TRESTLE_ZIP_KEY", "Trestle Zip")
+    captured = {}
+    trestle_data = {
+        "carrier": "Example Wireless",
+        "current_address": {
+            "city": "Braintree",
+            "location_type": "Address",
+            "postal_code": "02184",
+            "state_code": "MA",
+        },
+        "is_valid": True,
+        "line_type": "Mobile",
+    }
+
+    def fake_get_trestle_enrichment(
+        phone_number, from_zip, user_area_code, api_key, cache_conn
+    ):
+        captured.update(
+            phone_number=phone_number,
+            from_zip=from_zip,
+            user_area_code=user_area_code,
+            api_key=api_key,
+            cache_conn=cache_conn,
+        )
+        return dict(
+            data=trestle_data,
+            status="success",
+            trusted_zip="02184",
+            trust_reason="exact_from_zip",
+            latency_ms=12,
+            from_cache=False,
+        )
+
+    monkeypatch.setattr(
+        zar_endpoints, "get_trestle_enrichment", fake_get_trestle_enrichment
+    )
+    track_call_req = {
+        **SAMPLE_TRACK_CALL_REQUEST,
+        "call_id": "track-call-trestle",
+        "call_from": call_from,
+        "call_to": call_to,
+        "from_zip": "02184",
+    }
+
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["status"] == NumberPoolResponseStatus.SUCCESS
+    assert data["msg"]["user_context"]["Trestle Zip"] == "02184"
+    assert data["msg"]["trestle"] == trestle_data
+    assert captured == {
+        "phone_number": call_from,
+        "from_zip": "02184",
+        "user_area_code": "401",
+        "api_key": "secret",
+        "cache_conn": zar_endpoints.pool_api.conn,
+    }
+
+    trestle_data["carrier"] = "Updated Wireless"
+    retry_resp = client.post(
+        f"{settings.API_V2_STR}/track_call", json=track_call_req
+    )
+    assert retry_resp.status_code == 200, retry_resp.text
+
+    db.rollback()
+    enrichments = (
+        db.query(models.CallEnrichment)
+        .filter(models.CallEnrichment.call_id == track_call_req["call_id"])
+        .all()
+    )
+    assert len(enrichments) == 1
+    enrichment = enrichments[0]
+    assert enrichment.call_from == call_from
+    assert enrichment.call_to == call_to
+    assert enrichment.from_zip == "02184"
+    assert enrichment.trusted_zip == "02184"
+    assert enrichment.status == "success"
+    assert enrichment.trust_reason == "exact_from_zip"
+    assert enrichment.latency_ms == 12
+    assert enrichment.from_cache is False
+    assert json.loads(enrichment.properties) == {"trestle": trestle_data}
+    assert (
+        db.query(models.TrackCall)
+        .filter(models.TrackCall.call_id == track_call_req["call_id"])
+        .first()
+        is None
+    )
+
+
+def test_endpoint_track_call_skips_trestle_with_existing_user_zip(
+    client: TestClient, monkeypatch
+) -> None:
+    call_from = "4015550197"
+    call_to = "5551237787"
+    clear_cached_route_context(call_from, call_to)
+    zar_endpoints.pool_api.set_user_context("phone", call_from, {"Zip": "02184"})
+    zar_endpoints.pool_api.set_static_number_context(call_to, {"test": "trestle"})
+    monkeypatch.setattr(settings, "TRESTLE_API_KEY", "secret")
+    monkeypatch.setattr(settings, "USER_CONTEXT_TRESTLE_ZIP_KEY", "Trestle Zip")
+
+    def unexpected_trestle_lookup(*args, **kwargs):
+        raise AssertionError("Trestle should not be called when a user ZIP exists")
+
+    monkeypatch.setattr(
+        zar_endpoints, "get_trestle_enrichment", unexpected_trestle_lookup
+    )
+    track_call_req = {
+        **SAMPLE_TRACK_CALL_REQUEST,
+        "call_id": "track-call-existing-user-zip",
+        "call_from": call_from,
+        "call_to": call_to,
+        "from_zip": "02184",
+    }
+
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["msg"]["user_context"]["Zip"] == "02184"
+    zar_endpoints.pool_api.remove_user_context("phone", call_from)
+
+
+def test_endpoint_track_call_stores_trestle_no_result(
+    client: TestClient, db, monkeypatch
+) -> None:
+    call_from = "4015550195"
+    call_to = "5551237785"
+    call_id = "track-call-trestle-no-result"
+    clear_cached_route_context(call_from, call_to)
+    zar_endpoints.pool_api.remove_user_context("phone", call_from)
+    zar_endpoints.pool_api.set_static_number_context(call_to, {"test": "trestle"})
+    monkeypatch.setattr(settings, "TRESTLE_API_KEY", "secret")
+    monkeypatch.setattr(
+        zar_endpoints,
+        "get_trestle_enrichment",
+        lambda *args: dict(
+            data=None,
+            status="no_result",
+            trusted_zip=None,
+            trust_reason="not_applicable",
+            latency_ms=15,
+            from_cache=False,
+        ),
+    )
+    track_call_req = {
+        **SAMPLE_TRACK_CALL_REQUEST,
+        "call_id": call_id,
+        "call_from": call_from,
+        "call_to": call_to,
+        "from_zip": "02903",
+    }
+
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+
+    assert resp.status_code == 200, resp.text
+    db.rollback()
+    enrichment = (
+        db.query(models.CallEnrichment)
+        .filter(models.CallEnrichment.call_id == call_id)
+        .first()
+    )
+    assert enrichment
+    assert enrichment.status == "no_result"
+    assert enrichment.trust_reason == "not_applicable"
+    assert enrichment.properties is None
+    assert (
+        db.query(models.TrackCall)
+        .filter(models.TrackCall.call_id == call_id)
+        .first()
+        is None
+    )
+
+
+def test_endpoint_track_call_stores_filtered_trestle_context(
+    client: TestClient, db, monkeypatch
+) -> None:
+    reset_pool(client)
+    page(client)
+    resp = client.post(
+        f"{settings.API_V2_STR}/number_pool", json=SAMPLE_NUMBER_POOL_REQUEST
+    )
+    assert resp.status_code == 200, resp.text
+    number = resp.json()["number"]
+    call_from = "4015550196"
+    call_id = "track-call-stored-trestle"
+    clear_cached_route_context(call_from, number)
+    zar_endpoints.pool_api.remove_user_context("phone", call_from)
+    monkeypatch.setattr(settings, "TRESTLE_API_KEY", "secret")
+    monkeypatch.setattr(settings, "USER_CONTEXT_TRESTLE_ZIP_KEY", "Trestle Zip")
+    trestle_data = {
+        "belongs_to": {"firstname": "Test", "type": "Person"},
+        "carrier": "Test Wireless",
+        "current_address": {
+            "city": "Providence",
+            "location_type": "Address",
+            "postal_code": "02903",
+            "state_code": "RI",
+        },
+        "is_commercial": False,
+        "is_prepaid": False,
+        "is_valid": True,
+        "line_type": "Mobile",
+    }
+    monkeypatch.setattr(
+        zar_endpoints,
+        "get_trestle_enrichment",
+        lambda *args: dict(
+            data=trestle_data,
+            status="success",
+            trusted_zip="02903",
+            trust_reason="exact_from_zip",
+            latency_ms=8,
+            from_cache=False,
+        ),
+    )
+    track_call_req = {
+        **SAMPLE_TRACK_CALL_REQUEST,
+        "call_id": call_id,
+        "call_from": call_from,
+        "call_to": number,
+        "from_zip": "02903",
+    }
+
+    resp = client.post(f"{settings.API_V2_STR}/track_call", json=track_call_req)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["msg"]["trestle"] == trestle_data
+    db.rollback()
+    track_call = (
+        db.query(models.TrackCall)
+        .filter(models.TrackCall.call_id == call_id)
+        .order_by(models.TrackCall.id.desc())
+        .first()
+    )
+    assert track_call
+    stored_context = json.loads(track_call.number_context)
+    assert stored_context["trestle"] == trestle_data
+    assert stored_context["user_context"]["Trestle Zip"] == "02903"
+    clear_cached_route_context(call_from, number)
 
 
 def test_endpoint_number_pool_renew_returns_sid_ctx(client: TestClient) -> None:
