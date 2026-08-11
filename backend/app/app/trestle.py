@@ -12,8 +12,8 @@ TRESTLE_API_URL = "https://api.trestleiq.com/3.1/caller_id"
 TRESTLE_REQUEST_TIMEOUT = 1.0
 TRESTLE_CACHE_TTL_SECONDS = 14 * 24 * 60 * 60
 TRESTLE_CACHE_KEY_PREFIX = "trestle:caller"
-TRESTLE_FROM_ZIP_DISTANCE_LIMIT_MILES = 25
-TRESTLE_AREA_CODE_DISTANCE_LIMIT_MILES = 50
+TRESTLE_FROM_ZIP_DISTANCE_LIMIT_MILES = 20
+TRESTLE_AREA_CODE_DISTANCE_LIMIT_MILES = 25
 TRESTLE_AREA_CODE_ONLY_DISTANCE_LIMIT_MILES = 25
 
 _CACHE_MISS = object()
@@ -214,11 +214,19 @@ def _get_trestle_zip_trust(trestle_zip, from_zip, user_area_code):
     try:
         from_zip_distance = zip_to_zip_distance(trestle_zip, from_zip)
     except Exception:
-        return None, "invalid_zip"
+        from_zip_distance = None
+
+    if from_zip_distance is None:
+        if (
+            trestle_area_code_distance is not None
+            and trestle_area_code_distance
+            <= TRESTLE_AREA_CODE_ONLY_DISTANCE_LIMIT_MILES
+        ):
+            return trestle_zip, "nearby_area_code_with_from_zip"
+        return None, "conflicting_signals"
 
     if (
-        from_zip_distance is not None
-        and from_zip_distance <= TRESTLE_FROM_ZIP_DISTANCE_LIMIT_MILES
+        from_zip_distance <= TRESTLE_FROM_ZIP_DISTANCE_LIMIT_MILES
         and trestle_area_code_distance is not None
         and trestle_area_code_distance <= TRESTLE_AREA_CODE_DISTANCE_LIMIT_MILES
         and from_area_code_distance is not None

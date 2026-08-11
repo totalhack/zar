@@ -150,7 +150,7 @@ def test_trusted_trestle_zip_accepts_exact_from_zip_match(monkeypatch):
 def test_trusted_trestle_zip_accepts_nearby_corroborating_signals(monkeypatch):
     monkeypatch.setattr(trestle, "get_trestle_zip", lambda *args, **kwargs: "02903")
     monkeypatch.setattr(trestle, "zip_to_zip_distance", lambda *args: 10)
-    monkeypatch.setattr(trestle, "_zip_to_area_code_distance", lambda *args: 30)
+    monkeypatch.setattr(trestle, "_zip_to_area_code_distance", lambda *args: 20)
 
     assert (
         trestle.get_trusted_trestle_zip("4015550100", "02904", "401", "secret")
