@@ -206,9 +206,13 @@ def get_targeting_from_context(context, allow_geoip=True):
             if not (physical_state and interest_state):
                 area_codes = physical_area_codes
 
-            # If states are different, favor physical area code
             elif physical_state != interest_state:
-                area_codes = physical_area_codes
+                # Bing performs a bit differently than Google here
+                area_codes = (
+                    interest_area_codes
+                    if source_prefix == "bing-"
+                    else physical_area_codes
+                )
             else:
                 area_codes = interest_area_codes or physical_area_codes
         elif geo_mode == "2":
